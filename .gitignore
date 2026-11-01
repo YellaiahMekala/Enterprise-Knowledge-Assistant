@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+
+# Tool caches and reports
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+
+# Local configuration and secrets
+.env
+
+# Private corpus and generated evaluation output (never committed)
+data/
+eval/reports/
+
+# Later phases
+frontend/node_modules/
+frontend/dist/
+gateway/target/

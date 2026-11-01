@@ -1,0 +1,38 @@
+# Local stack: PostgreSQL with pgvector, and the API.
+# Settings come from a git-ignored .env file (copy .env.example); nothing secret is stored here.
+services:
+  db:
+    # Exact tag, not "pg17": pgvector 0.8.7 on PostgreSQL 17.11 was recorded in phase P1.
+    image: pgvector/pgvector:0.8.7-pg17
+    environment:
+      POSTGRES_USER: eka
+      POSTGRES_DB: eka
+      POSTGRES_PASSWORD: ${EKA_DB_PASSWORD:?Set EKA_DB_PASSWORD in .env (copy .env.example)}
+    ports:
+      # Loopback only, for running migrations and tests from the host. Not for deployment.
+      - "127.0.0.1:${EKA_DB_PORT:-5432}:5432"
+    volumes:
+      - eka-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eka -d eka"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  api:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      EKA_ENVIRONMENT: ${EKA_ENVIRONMENT:-local}
+      EKA_LOG_LEVEL: ${EKA_LOG_LEVEL:-INFO}
+      EKA_DATABASE_URL: postgresql+psycopg://eka:${EKA_DB_PASSWORD}@db:5432/eka
+      EKA_AUTH_MODE: api_key
+      EKA_API_KEYS: ${EKA_API_KEYS:?Set EKA_API_KEYS in .env (see .env.example)}
+
+volumes:
+  eka-pgdata:
