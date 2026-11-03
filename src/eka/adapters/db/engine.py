@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import (
 from eka.domain.models import Role, is_valid_user_id
 
 API_ROLE = "eka_api"  # constant, so interpolating it into SET ROLE is safe
+WORKER_ROLE = "eka_worker"  # the ingestion worker: cross-owner, grants limited to two tables
 CONNECT_TIMEOUT_S = 5
 
 
@@ -58,6 +59,14 @@ class Database:
                 ),
                 {"owner": owner_id, "role": role.value},
             )
+            yield session
+
+    @asynccontextmanager
+    async def worker_session(self) -> AsyncIterator[AsyncSession]:
+        """One transaction as the ingestion worker role. Used only by the worker process (it
+        serves every owner); the policies for this role are explicit in migration 0001."""
+        async with self._sessions() as session, session.begin():
+            await session.execute(text(f"SET LOCAL ROLE {WORKER_ROLE}"))
             yield session
 
     async def dispose(self) -> None:

@@ -2,18 +2,34 @@
 
 import logging
 from collections.abc import Awaitable, Callable
+from contextlib import AbstractAsyncContextManager
 from typing import Annotated
 
 from fastapi import Depends, Request, Security
 from fastapi.security import APIKeyHeader
 
 from eka.domain.errors import Unauthorized
+from eka.domain.models import Role
 from eka.request_context import current_context
 from eka.security.auth import ApiKeyAuthenticator, Principal
+from eka.services.documents import DocumentService
 
 logger = logging.getLogger(__name__)
 
 ReadinessCheck = Callable[[], Awaitable[None]]
+# Opens one transaction scoped to a user and yields a service bound to it (built in main.py).
+DocumentServiceFactory = Callable[[str, Role], AbstractAsyncContextManager[DocumentService]]
+
+
+def get_document_service_factory(request: Request) -> DocumentServiceFactory:
+    factory: DocumentServiceFactory = request.app.state.document_service_factory
+    return factory
+
+
+def get_max_upload_bytes(request: Request) -> int:
+    limit: int = request.app.state.max_upload_bytes
+    return limit
+
 
 # auto_error=False: the scheme documents the header in OpenAPI; our handler produces the 401.
 _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
@@ -47,3 +63,7 @@ async def get_principal(
 
 
 CurrentPrincipal = Annotated[Principal, Depends(get_principal)]
+
+
+DocumentServices = Annotated[DocumentServiceFactory, Depends(get_document_service_factory)]
+MaxUploadBytes = Annotated[int, Depends(get_max_upload_bytes)]

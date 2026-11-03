@@ -131,16 +131,16 @@ Priority: **M** must · **S** should · **C** could. Phase refers to the [Implem
 ### 6.2 Ingestion
 | ID | Requirement | Pri | Status | Phase |
 |---|---|---|---|---|
-| FR-10 | Upload PDF, DOCX or CSV as multipart; validate real file type (content, not only extension), size and per-user quota; store the raw file; respond 202 with document id and status | M | Planned | P2 |
-| FR-11 | Upload is idempotent: the same content (SHA-256) from the same user returns the existing document and creates no duplicate chunks | S | Planned | P2 |
-| FR-12 | Extract text with a locator: PDF → page number; DOCX → heading path; CSV → row range (header row kept with each chunk) | M | Planned | P2 |
-| FR-13 | Clean text: Unicode normalisation, control-character removal, de-hyphenation across line breaks, whitespace collapse | M | Planned | P2 |
-| FR-14 | Chunk with configurable size and overlap, measured in the embedding model's tokens and never above its input limit. A chunk never crosses a page, section or row-group boundary | M | Planned | P2 |
-| FR-15 | Tag each chunk with metadata: document id, file name, owner, locator, ordinal, character offsets, content type, upload time, embedding model, chunking configuration | M | Planned | P2 |
-| FR-16 | Embed chunks and index them for dense and full-text search; set the document to `ready`. On failure set `failed` with a safe error code and retry up to a configured limit | M | Planned | P2 |
-| FR-17 | List (paged), inspect status of, and delete documents. Delete removes rows, vectors and the raw file | M | Planned | P2 |
-| FR-18 | Reject unsupported, corrupt, password-protected and image-only files with a specific error code | S | Planned | P2 |
-| FR-19 | Store raw files through a storage interface with a local-disk adapter (default) and an S3 adapter selected by configuration | S | Planned | P2 (local), P9 (S3) |
+| FR-10 | Upload PDF, DOCX or CSV as multipart; validate real file type (content, not only extension), size and per-user quota; store the raw file; respond 202 with document id and status | M | Done | P2 |
+| FR-11 | Upload is idempotent: the same content (SHA-256) from the same user returns the existing document and creates no duplicate chunks | S | Done | P2 |
+| FR-12 | Extract text with a locator: PDF → page number; DOCX → heading path; CSV → row range (header row kept with each chunk) | M | Done | P2 |
+| FR-13 | Clean text: Unicode normalisation, control-character removal, de-hyphenation across line breaks, whitespace collapse | M | Done | P2 |
+| FR-14 | Chunk with configurable size and overlap, measured in the embedding model's tokens and never above its input limit. A chunk never crosses a page, section or row-group boundary | M | Done | P2 |
+| FR-15 | Tag each chunk with metadata: document id, file name, owner, locator, ordinal, character offsets, content type, upload time, embedding model, chunking configuration | M | Done | P2 |
+| FR-16 | Embed chunks and index them for dense and full-text search; set the document to `ready`. On failure set `failed` with a safe error code and retry up to a configured limit | M | Done | P2 |
+| FR-17 | List (paged), inspect status of, and delete documents. Delete removes rows, vectors and the raw file | M | Done | P2 |
+| FR-18 | Reject unsupported, corrupt, password-protected and image-only files with a specific error code | S | Done | P2 |
+| FR-19 | Store raw files through a storage interface with a local-disk adapter (default) and an S3 adapter selected by configuration | S | Partial | P2 (local done), P9 (S3 Planned) |
 
 ### 6.3 Retrieval
 | ID | Requirement | Pri | Status | Phase |
@@ -190,7 +190,7 @@ FR-52 status: both endpoints exist and are tested; readiness currently checks no
 
 | ID | Requirement | Pri | Status | Phase |
 |---|---|---|---|---|
-| FR-36 | Ingest code and text files (`.java`, `.md`, `.txt`, `.xml`, `.sql` and similar allow-listed extensions): UTF-8 only, size-capped, binary rejected; chunk preferring class and method boundaries; locator is file plus line range | S | Planned | P2 |
+| FR-36 | Ingest code and text files (`.java`, `.md`, `.txt`, `.xml`, `.sql` and similar allow-listed extensions): UTF-8 only, size-capped, binary rejected; chunk preferring class and method boundaries; locator is file plus line range | S | Done | P2 |
 | FR-37 | Optional web fallback: when the user's documents give weak evidence, fetch from an owner-configured allowlist of official HTTPS sites only (SSRF-safe, size and time capped, redirects re-checked), treat the page as untrusted, store it as a document with source URL and fetch date, and cite it as a web source distinct from document citations | C | Planned (optional) | P4b |
 | FR-38 | Two answer-streaming modes: **verified** (default) releases text only after citations validate; **fast** (optional) streams immediately, marks text provisional, and the final event confirms or replaces it | M | Planned | P4 |
 

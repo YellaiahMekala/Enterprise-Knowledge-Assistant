@@ -63,3 +63,12 @@ def fresh_alembic(server_url: URL) -> Iterator[tuple[Config, str]]:
     name = "eka_mig_" + secrets.token_hex(4)
     url = create_database(server_url, name)
     yield alembic_config(url), url
+
+
+@pytest.fixture
+def isolated_url(server_url: URL) -> str:
+    """A private, fully migrated database for one test. Needed where a test claims work from the
+    shared queue (it would otherwise pick up documents that other tests left pending)."""
+    url = create_database(server_url, "eka_it_" + secrets.token_hex(4))
+    command.upgrade(alembic_config(url), "head")
+    return url

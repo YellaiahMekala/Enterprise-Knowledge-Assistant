@@ -1,4 +1,4 @@
-# Local stack: PostgreSQL with pgvector, and the API.
+# Local stack: PostgreSQL with pgvector, a one-shot migration, the API and the ingestion worker.
 # Settings come from a git-ignored .env file (copy .env.example); nothing secret is stored here.
 services:
   db:
@@ -20,11 +20,22 @@ services:
       retries: 10
       start_period: 10s
 
-  api:
+  # Applies the schema once, then exits. The API and the worker start only after it succeeded.
+  migrate:
     build: .
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
     depends_on:
       db:
         condition: service_healthy
+    environment:
+      EKA_DATABASE_URL: postgresql+psycopg://eka:${EKA_DB_PASSWORD}@db:5432/eka
+
+  api:
+    build: .
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     ports:
       - "8000:8000"
     environment:
@@ -33,6 +44,30 @@ services:
       EKA_DATABASE_URL: postgresql+psycopg://eka:${EKA_DB_PASSWORD}@db:5432/eka
       EKA_AUTH_MODE: api_key
       EKA_API_KEYS: ${EKA_API_KEYS:?Set EKA_API_KEYS in .env (see .env.example)}
+    volumes:
+      - eka-files:/data/files
+
+  # Parses, chunks and embeds uploaded documents. Downloads the embedding model (about 200 MB)
+  # into the eka-models volume on its first start; later starts reuse it.
+  worker:
+    build: .
+    command: ["python", "-m", "eka.worker"]
+    # The image's HTTP health check does not apply: the worker serves no HTTP. Its progress shows
+    # in the logs and in the document statuses.
+    healthcheck:
+      disable: true
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      EKA_ENVIRONMENT: ${EKA_ENVIRONMENT:-local}
+      EKA_LOG_LEVEL: ${EKA_LOG_LEVEL:-INFO}
+      EKA_DATABASE_URL: postgresql+psycopg://eka:${EKA_DB_PASSWORD}@db:5432/eka
+    volumes:
+      - eka-files:/data/files
+      - eka-models:/data/models
 
 volumes:
   eka-pgdata:
+  eka-files:
+  eka-models:

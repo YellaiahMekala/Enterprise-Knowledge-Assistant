@@ -2,7 +2,7 @@
 
 Chat with your documents through a REST API. Each answer will cite the document, page and passage it came from, and the service will decline to answer when the retrieved evidence is weak.
 
-> **Status: foundation.** The service skeleton, API-key authentication, the PostgreSQL schema with row-level isolation, and the delivery files exist and have been checked by local runs. The retrieval-augmented generation (RAG) features, the enterprise edge and the web UI are designed (see Documentation) and not built yet. Nothing in this repository has been measured for retrieval quality, latency or load, and the CI workflow has not run yet.
+> **Status: ingestion.** Documents can be uploaded and become searchable chunks in the background, with per-user isolation. Retrieval, answers and the Java edge are not built yet. **Status: foundation.** The service skeleton, API-key authentication, the PostgreSQL schema with row-level isolation, and the delivery files exist and have been checked by local runs. The retrieval-augmented generation (RAG) features, the enterprise edge and the web UI are designed (see Documentation) and not built yet. Nothing in this repository has been measured for retrieval quality, latency or load, and the CI workflow has not run yet.
 
 Planned architecture (not built): Angular web UI → Spring Boot enterprise edge (Java 21, Spring Boot 4.1: OIDC token validation, audit, rate limits, resilience) → FastAPI RAG core → PostgreSQL with pgvector. A thin version of the edge is built right after isolated search, so the Java layer is exercised by every later phase.
 
@@ -10,7 +10,7 @@ Planned architecture (not built): Angular web UI → Spring Boot enterprise edge
 
 The tables below follow the [evidence ledger](docs/Release_Evidence.md): a claim appears under Built or Measured only when the ledger has a row for it.
 
-### Built (checked by local runs on 2026-10-31; no CI run exists yet)
+### Built (checked by local runs on 2026-10-31 and 2026-11-03; no CI run exists yet)
 
 | Item | Evidence |
 |---|---|
@@ -21,12 +21,15 @@ The tables below follow the [evidence ledger](docs/Release_Evidence.md): a claim
 | Per-user isolation in two layers: an owner-scoped repository, and row-level security that fails closed (a session without an owner sees nothing) | 11 row-level-security tests on a real database; the tests were checked by weakening the policy and watching them fail (C-08, E-013) |
 | Import-boundary and repository-signature tests that enforce the layering; committed OpenAPI snapshot that fails the build when the contract changes | Tests (C-09) |
 | Docker image (multi-stage, non-root, health check) and Compose stack (database and API) | Built and run locally; readiness is 503 with the database stopped and recovers after restart (C-06, E-012) |
-| Lint, format and strict type checks clean; 123 tests; 94.16% line coverage (gate 85%) | Ruff, mypy and `pytest --cov` runs (E-007, E-008) |
+| Document upload (PDF, DOCX, CSV, code and text) with validation by file content; the same bytes are returned as the existing document; quotas; delete removes the file and its chunks | Tests; a real upload through the Docker stack (E-016, C-10) |
+| Background ingestion worker: parses (in a child process with a timeout), chunks with the embedding model's own tokenizer, embeds locally with BGE-small (384 dimensions), and retries transient failures | Tests with a real PostgreSQL; a real run in Docker with the real model (E-015, E-016, C-11, C-13) |
+| Lint, format and strict type checks clean; 298 tests (5 more with the real model); 91.5% line coverage (gate 85%) | Ruff, mypy and `pytest --cov` runs (E-014) |
 
 ### Written, not yet verified
 
 | Item | What is missing |
 |---|---|
+| Document ingestion for DOCX, CSV and code through the Docker stack | Run in-process against real PostgreSQL only; a run through the Docker stack is still open |
 | GitHub Actions workflow (lint and types on Python 3.11 and 3.12, offline tests, integration tests with the coverage gate, image build and smoke test) | The workflow has not been run on GitHub. Its steps were run by hand locally |
 
 ### Measured

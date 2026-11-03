@@ -31,6 +31,14 @@ class DocumentRepository(Protocol):
         """The owner's documents, newest first."""
         ...
 
+    async def get_by_sha256(self, owner_id: str, sha256: str) -> Document | None:
+        """The owner's document with these exact bytes, or ``None``."""
+        ...
+
+    async def count_by_owner(self, owner_id: str) -> int:
+        """How many documents the owner holds (for the quota)."""
+        ...
+
     async def delete(self, owner_id: str, document_id: UUID) -> bool:
         """Delete the document and, by cascade, its chunks. ``False`` if there was none."""
         ...

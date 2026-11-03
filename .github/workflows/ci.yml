@@ -60,6 +60,11 @@ jobs:
       - uses: actions/checkout@v7
       - name: Build image
         run: docker build -t eka:ci .
+      - name: The image ships the migrations and the worker
+        run: |
+          docker run --rm eka:ci alembic history
+          docker run --rm eka:ci python -c "import eka.worker, eka.adapters.embedder_fastembed"
+          docker image inspect eka:ci --format 'image size: {{.Size}} bytes'
       - name: Smoke test the container
         # Liveness only: the container is started without a database, so readiness (which
         # checks the database) would correctly report 503. Startup validation needs settings,

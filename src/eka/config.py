@@ -1,12 +1,13 @@
 """Typed settings, read from EKA_* environment variables or a local .env file."""
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from eka.domain.models import Role, is_valid_user_id
+from eka.domain.models import ParseLimits, Role, is_valid_user_id
 
 DATABASE_URL_PREFIX = "postgresql+psycopg://"
 
@@ -28,6 +29,9 @@ class Settings(BaseSettings):
     )
 
     environment: Literal["local", "test", "prod"] = "local"
+    # Which process reads these settings. The worker authenticates nobody, so it is not asked
+    # for (and is not given) the API keys.
+    component: Literal["api", "worker"] = "api"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     log_json: bool = False
 
@@ -37,6 +41,62 @@ class Settings(BaseSettings):
     auth_mode: Literal["api_key", "gateway"] | None = None
     # JSON object: {"<user-id>": {"sha256": "<hex digest>", "role": "user|admin"}}
     api_keys: dict[str, ApiKeyEntry] = Field(default_factory=dict, repr=False)
+
+    # --- storage and ingestion (phase P2) ---
+    storage_backend: Literal["local"] = "local"  # "s3" arrives in phase P9
+    storage_local_dir: Path = Path("./data/files")
+    max_upload_mb: int = Field(default=20, ge=1, le=200)
+    max_pages: int = Field(default=500, ge=1)
+    max_csv_rows: int = Field(default=50_000, ge=1)
+    max_docs_per_user: int = Field(default=200, ge=1)
+    # Code and text files accepted besides PDF, DOCX and CSV (FR-36).
+    allowed_text_extensions: tuple[str, ...] = (
+        ".java",
+        ".md",
+        ".txt",
+        ".xml",
+        ".sql",
+        ".properties",
+        ".yml",
+        ".json",
+    )
+    max_text_file_kb: int = Field(default=512, ge=1)
+    embedding_model: str = "BAAI/bge-small-en-v1.5"
+    embedding_dim: int = 384  # must equal the chunks.embedding column (migration 0001)
+    embedding_cache_dir: Path = Path("./data/models")
+    # Starting values, replaced by the results of experiment E1 (TDD 4.11). 510 = 512 - 2.
+    chunk_tokens: int = Field(default=256, ge=16, le=510)
+    chunk_overlap_tokens: int = Field(default=32, ge=0)
+    worker_poll_seconds: float = Field(default=2.0, gt=0)
+    worker_max_attempts: int = Field(default=3, ge=1)
+    worker_stale_claim_minutes: int = Field(default=10, ge=1)
+    parse_timeout_seconds: float = Field(default=120.0, gt=0)
+
+    @field_validator("allowed_text_extensions")
+    @classmethod
+    def _extensions_are_well_formed(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        cleaned = tuple(item.strip().lower() for item in value)
+        if any(not item.startswith(".") or len(item) < 2 or "/" in item for item in cleaned):
+            raise ValueError("each extension must look like '.java'")
+        return cleaned
+
+    @model_validator(mode="after")
+    def _overlap_is_smaller_than_chunk(self) -> Self:
+        if self.chunk_overlap_tokens >= self.chunk_tokens:
+            raise ValueError("EKA_CHUNK_OVERLAP_TOKENS must be smaller than EKA_CHUNK_TOKENS")
+        return self
+
+    @property
+    def max_upload_bytes(self) -> int:
+        return self.max_upload_mb * 1024 * 1024
+
+    @property
+    def parse_limits(self) -> ParseLimits:
+        return ParseLimits(
+            max_pages=self.max_pages,
+            max_csv_rows=self.max_csv_rows,
+            max_text_bytes=self.max_text_file_kb * 1024,
+        )
 
     @field_validator("api_keys")
     @classmethod
@@ -61,6 +121,8 @@ class Settings(BaseSettings):
             return self
         if self.database_url is None:
             raise ValueError("EKA_DATABASE_URL is required outside environment=test")
+        if self.component == "worker":
+            return self
         if self.auth_mode is None:
             raise ValueError("EKA_AUTH_MODE is required outside environment=test")
         if self.auth_mode == "gateway":

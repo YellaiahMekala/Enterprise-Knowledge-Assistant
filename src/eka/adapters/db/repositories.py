@@ -3,7 +3,7 @@ ADR-012); the session's row-level security is layer two."""
 
 from uuid import UUID
 
-from sqlalchemy import RowMapping, delete, select
+from sqlalchemy import RowMapping, delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -81,6 +81,19 @@ class SqlDocumentRepository:
         query = query.order_by(documents.c.created_at.desc(), documents.c.id).limit(limit)
         result = await self._session.execute(query.offset(offset))
         return [_to_document(row) for row in result.mappings()]
+
+    async def get_by_sha256(self, owner_id: str, sha256: str) -> Document | None:
+        result = await self._session.execute(
+            select(documents).where(documents.c.owner_id == owner_id, documents.c.sha256 == sha256)
+        )
+        row = result.mappings().first()
+        return _to_document(row) if row is not None else None
+
+    async def count_by_owner(self, owner_id: str) -> int:
+        result = await self._session.execute(
+            select(func.count()).select_from(documents).where(documents.c.owner_id == owner_id)
+        )
+        return int(result.scalar_one())
 
     async def delete(self, owner_id: str, document_id: UUID) -> bool:
         result = await self._session.execute(

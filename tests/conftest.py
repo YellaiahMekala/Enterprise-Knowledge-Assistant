@@ -23,3 +23,9 @@ def client() -> Iterator[TestClient]:
     # raise_server_exceptions=False: a 500 must reach us as a response, as it would a client.
     with TestClient(app, raise_server_exceptions=False) as test_client:
         yield test_client
+
+
+@pytest.fixture
+def anyio_backend() -> str:
+    """Async tests use anyio's pytest plugin (already installed with Starlette), asyncio only."""
+    return "asyncio"

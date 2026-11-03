@@ -100,3 +100,37 @@ def test_repr_hides_the_database_password_and_key_digests() -> None:
     text = repr(_local())
     assert "s3cretpw" not in text
     assert digest_key("k").hex() not in text
+
+
+def test_the_worker_needs_a_database_but_no_api_keys() -> None:
+    worker = Settings(_env_file=None, environment="local", component="worker", database_url=DB_URL)
+    assert worker.component == "worker" and worker.api_keys == {}
+    with pytest.raises(ValidationError, match="EKA_DATABASE_URL"):
+        Settings(_env_file=None, environment="local", component="worker")
+
+
+def test_ingestion_defaults_are_sane() -> None:
+    settings = _local()
+    assert settings.max_upload_bytes == 20 * 1024 * 1024
+    assert settings.chunk_tokens <= 510 and settings.chunk_overlap_tokens < settings.chunk_tokens
+    assert settings.parse_limits.max_text_bytes == settings.max_text_file_kb * 1024
+    assert ".java" in settings.allowed_text_extensions
+
+
+def test_overlap_must_be_smaller_than_the_chunk_size() -> None:
+    with pytest.raises(ValidationError, match="OVERLAP"):
+        _local(chunk_tokens=64, chunk_overlap_tokens=64)
+
+
+def test_chunk_size_cannot_exceed_the_model_input() -> None:
+    with pytest.raises(ValidationError):
+        _local(chunk_tokens=511)
+
+
+def test_text_extensions_are_normalised_and_validated(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("EKA_ALLOWED_TEXT_EXTENSIONS", '[".JAVA", " .Md "]')
+    assert Settings(_env_file=None, environment="test").allowed_text_extensions == (".java", ".md")
+    with pytest.raises(ValidationError, match="extension"):
+        _local(allowed_text_extensions=("java",))
+    with pytest.raises(ValidationError, match="extension"):
+        _local(allowed_text_extensions=("./x",))

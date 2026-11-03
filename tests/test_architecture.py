@@ -19,7 +19,7 @@ SRC = Path(__file__).resolve().parents[1] / "src" / "eka"
 ALLOWED_EKA = {
     "domain": set(),
     "ports": {"domain"},
-    "services": {"domain", "ports"},
+    "services": {"domain", "ports", "ingestion"},
     "ingestion": {"domain"},
     "adapters": {"domain", "ports"},
     "security": {"domain"},

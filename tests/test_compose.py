@@ -41,3 +41,41 @@ def test_the_example_env_file_has_placeholders_not_values() -> None:
 def test_the_real_env_file_is_ignored_by_git() -> None:
     ignored = (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
     assert ".env" in ignored
+
+
+def _service_block(name: str) -> str:
+    compose = _compose()
+    match = re.search(rf"^  {name}:\n((?:    .*\n|\n)+)", compose, re.MULTILINE)
+    assert match, f"compose has no '{name}' service"
+    return match.group(1)
+
+
+def test_migrations_run_once_before_the_api_and_the_worker_start() -> None:
+    migrate = _service_block("migrate")
+    assert 'command: ["alembic", "upgrade", "head"]' in migrate
+    for service in ("api", "worker"):
+        block = _service_block(service)
+        assert "migrate:" in block and "service_completed_successfully" in block, service
+
+
+def test_api_and_worker_share_the_file_volume_and_only_the_worker_holds_the_model() -> None:
+    api, worker = _service_block("api"), _service_block("worker")
+    assert "eka-files:/data/files" in api and "eka-files:/data/files" in worker
+    assert "eka-models:/data/models" in worker and "eka-models" not in api
+    assert 'command: ["python", "-m", "eka.worker"]' in worker
+
+
+def test_the_worker_is_not_given_the_api_keys() -> None:
+    assert "EKA_API_KEYS" not in _service_block("worker")
+
+
+def test_the_image_ships_the_migrations_and_writable_data_directories() -> None:
+    dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+    assert "COPY alembic ./alembic" in dockerfile and "COPY alembic.ini ./" in dockerfile
+    assert "chown -R app:app /data" in dockerfile
+    assert "USER app" in dockerfile  # still non-root
+
+
+def test_the_worker_disables_the_http_health_check_it_inherits_from_the_image() -> None:
+    worker = _service_block("worker")
+    assert "healthcheck:\n      disable: true" in worker

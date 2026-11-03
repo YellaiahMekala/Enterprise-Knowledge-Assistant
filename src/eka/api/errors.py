@@ -14,7 +14,14 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from eka.api.schemas import PROBLEM_MEDIA_TYPE
-from eka.domain.errors import NotFound, Unauthorized, Unavailable
+from eka.domain.errors import (
+    NotFound,
+    PayloadTooLarge,
+    QuotaExceeded,
+    Unauthorized,
+    Unavailable,
+    UnsupportedMedia,
+)
 from eka.request_context import REQUEST_ID_HEADER
 
 logger = logging.getLogger(__name__)
@@ -76,6 +83,29 @@ def install_error_handlers(app: FastAPI) -> None:
     async def _unavailable(request: Request, exc: Unavailable) -> JSONResponse:
         return problem(
             request, 503, slug="unavailable", detail="A required service is unavailable."
+        )
+
+    @app.exception_handler(UnsupportedMedia)
+    async def _unsupported_media(request: Request, exc: UnsupportedMedia) -> JSONResponse:
+        # ``reason`` is a fixed code ("type_mismatch", ...), safe to return.
+        return problem(
+            request,
+            415,
+            detail="This file type is not supported, or the file does not match its type.",
+            extra={"reason": exc.reason},
+        )
+
+    @app.exception_handler(PayloadTooLarge)
+    async def _too_large(request: Request, exc: PayloadTooLarge) -> JSONResponse:
+        return problem(request, 413, detail="The file is larger than the allowed size.")
+
+    @app.exception_handler(QuotaExceeded)
+    async def _quota(request: Request, exc: QuotaExceeded) -> JSONResponse:
+        return problem(
+            request,
+            403,
+            slug="quota-exceeded",
+            detail="The maximum number of documents has been reached. Delete one first.",
         )
 
     @app.exception_handler(RequestValidationError)
