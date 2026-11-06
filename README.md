@@ -2,9 +2,8 @@
 
 [![CI](https://github.com/YellaiahMekala/Enterprise-Knowledge-Assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/YellaiahMekala/Enterprise-Knowledge-Assistant/actions/workflows/ci.yml)
 
-**Tech stack** · Python 3.11+ · FastAPI · Uvicorn · Pydantic · PostgreSQL 17 + pgvector 0.8.7 · SQLAlchemy 2 · psycopg 3 · Alembic · pytest · Ruff · mypy · Docker · GitHub Actions
-
-<sub>Also: pydantic-settings · pgvector client · owner-scoped repositories + PostgreSQL RLS · SHA-256 API keys · RFC 9457 problem+json · pypdf · python-docx · python-multipart · background worker · Testcontainers · Hypothesis · httpx · pytest-cov (85% gate) · Hatchling · Docker Compose. GitHub Actions is written, not yet run.</sub>
+**Core stack**  
+![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white) ![Java 21](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white) ![AI and RAG](https://img.shields.io/badge/AI-RAG-7B2CBF) ![FastAPI](https://img.shields.io/badge/FastAPI-API-009688?logo=fastapi&logoColor=white) ![Spring Boot](https://img.shields.io/badge/Spring_Boot-Edge-6DB33F?logo=springboot&logoColor=white) ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-4169E1?logo=postgresql&logoColor=white) ![pgvector](https://img.shields.io/badge/pgvector-0.8.7-4169E1) ![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white) ![pytest](https://img.shields.io/badge/pytest-testing-0A9EDC?logo=pytest&logoColor=white) ![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-CI-2088FF?logo=githubactions&logoColor=white)
 
 Chat with your documents through a REST API. Each answer will cite the document, page and passage it came from, and the service will decline to answer when the retrieved evidence is weak.
 
