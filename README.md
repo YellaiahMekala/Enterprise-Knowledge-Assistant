@@ -1,5 +1,7 @@
 # Enterprise Knowledge Assistant (EKA)
 
+[![CI](https://github.com/YellaiahMekala/Enterprise-Knowledge-Assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/YellaiahMekala/Enterprise-Knowledge-Assistant/actions/workflows/ci.yml)
+
 Chat with your documents through a REST API. Each answer will cite the document, page and passage it came from, and the service will decline to answer when the retrieved evidence is weak.
 
 > **Status: ingestion.** Documents can be uploaded and become searchable chunks in the background, with per-user isolation. Retrieval, answers and the Java edge are not built yet. **Status: foundation.** The service skeleton, API-key authentication, the PostgreSQL schema with row-level isolation, and the delivery files exist and have been checked by local runs. The retrieval-augmented generation (RAG) features, the enterprise edge and the web UI are designed (see Documentation) and not built yet. Nothing in this repository has been measured for retrieval quality, latency or load, and the CI workflow has not run yet.
