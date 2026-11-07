@@ -27,7 +27,8 @@ EF_SEARCH = 400
 
 def _random_unit(rng: np.random.Generator, n: int) -> np.ndarray:
     vectors = rng.standard_normal((n, DIM)).astype(np.float32)
-    return vectors / np.linalg.norm(vectors, axis=1, keepdims=True)
+    unit: np.ndarray = vectors / np.linalg.norm(vectors, axis=1, keepdims=True)
+    return unit
 
 
 def _literal(vector: np.ndarray) -> str:
