@@ -1,0 +1,18 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  # The core's metrics are admin-only; the admin key is read from a file that is not in git.
+  - job_name: core
+    metrics_path: /api/v1/admin/metrics
+    http_headers:
+      X-API-Key:
+        files: [/etc/prometheus/secrets/admin_key]
+    static_configs:
+      - targets: ['api:8000']
+
+  # The edge serves metrics on its management port, which is not published.
+  - job_name: edge
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['edge:8081']

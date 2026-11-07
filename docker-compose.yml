@@ -67,6 +67,65 @@ services:
       - eka-files:/data/files
       - eka-models:/data/models
 
+  # Edge profile: `docker compose --profile edge up`. The core behind it accepts only tokens the
+  # edge signed, and is not published to the host. Needs an OIDC provider (EKA_EDGE_OIDC_*);
+  # the edge refuses to start without them.
+  core-behind-edge:
+    profiles: [edge]
+    build: .
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      EKA_ENVIRONMENT: ${EKA_ENVIRONMENT:-local}
+      EKA_DATABASE_URL: postgresql+psycopg://eka:${EKA_DB_PASSWORD}@db:5432/eka
+      EKA_AUTH_MODE: gateway
+      EKA_GATEWAY_JWKS_URL: http://edge:8081/actuator/jwks
+    volumes:
+      - eka-files:/data/files
+
+  edge:
+    profiles: [edge]
+    build: ./gateway
+    depends_on:
+      - core-behind-edge
+    ports:
+      - "8080:8080"
+    environment:
+      EKA_EDGE_CORE_URL: http://core-behind-edge:8000
+      EKA_EDGE_PSEUDONYM_SECRET: ${EKA_EDGE_PSEUDONYM_SECRET:-}
+      EKA_EDGE_OIDC_ISSUER: ${EKA_EDGE_OIDC_ISSUER:-}
+      EKA_EDGE_OIDC_JWK_SET_URI: ${EKA_EDGE_OIDC_JWK_SET_URI:-}
+      EKA_EDGE_OIDC_AUDIENCE: ${EKA_EDGE_OIDC_AUDIENCE:-eka-api}
+      EKA_EDGE_SIGNING_KEY_FILE: ${EKA_EDGE_SIGNING_KEY_FILE:-}
+      EKA_EDGE_EPHEMERAL_KEY: ${EKA_EDGE_EPHEMERAL_KEY:-true}
+
+  # Monitoring profile: `docker compose --profile monitoring up`. Put an admin API key (the
+  # plain key, not its hash) in monitoring/secrets/admin_key; that folder is git-ignored.
+  # Set EKA_GRAFANA_PASSWORD; if empty, Grafana keeps its default login (loopback only).
+  prometheus:
+    profiles: [monitoring]
+    image: prom/prometheus:v3.5.0
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/secrets:/etc/prometheus/secrets:ro
+    ports:
+      - "127.0.0.1:9090:9090"
+
+  grafana:
+    profiles: [monitoring]
+    image: grafana/grafana:12.1.0
+    depends_on:
+      - prometheus
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_SECURITY_ADMIN_PASSWORD: ${EKA_GRAFANA_PASSWORD:-}
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "127.0.0.1:3000:3000"
+
 volumes:
   eka-pgdata:
   eka-files:

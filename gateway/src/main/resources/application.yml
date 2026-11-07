@@ -1,0 +1,45 @@
+server:
+  port: ${EKA_EDGE_PORT:8080}
+
+spring:
+  application:
+    name: eka-edge
+  cloud:
+    gateway:
+      server:
+        webflux:
+          httpclient:
+            connect-timeout: 3000
+            response-timeout: 120s
+          routes:
+            # Everything under /api goes to the core, except what a controller answers itself
+            # (GET /api/v1/me): controllers are matched before routes.
+            - id: core-api
+              uri: ${eka.edge.core-url}
+              predicates:
+                - Path=/api/**
+
+management:
+  # A separate port: health probes and the internal key set are not served to the public.
+  server:
+    port: ${EKA_EDGE_MANAGEMENT_PORT:8081}
+  endpoints:
+    web:
+      exposure:
+        include: health,info,jwks,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+eka:
+  edge:
+    core-url: ${EKA_EDGE_CORE_URL}
+    pseudonym-secret: ${EKA_EDGE_PSEUDONYM_SECRET}
+    oidc:
+      issuer: ${EKA_EDGE_OIDC_ISSUER}
+      jwk-set-uri: ${EKA_EDGE_OIDC_JWK_SET_URI}
+      audience: ${EKA_EDGE_OIDC_AUDIENCE:eka-api}
+    internal-token:
+      signing-key-file: ${EKA_EDGE_SIGNING_KEY_FILE:}
+      ephemeral-key: ${EKA_EDGE_EPHEMERAL_KEY:false}
