@@ -1,14 +1,24 @@
 """Repository implementations. Each method filters by ``owner_id`` explicitly (layer one of
 ADR-012); the session's row-level security is layer two."""
 
+from typing import Any
 from uuid import UUID
 
-from sqlalchemy import RowMapping, delete, func, select
+from sqlalchemy import RowMapping, delete, func, select, update
+from sqlalchemy import insert as core_insert
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from eka.adapters.db.tables import documents
-from eka.domain.models import Document, DocumentStatus, NewDocument
+from eka.adapters.db.tables import conversations, documents, messages, usage_events
+from eka.domain.models import (
+    Citation,
+    Conversation,
+    Document,
+    DocumentStatus,
+    NewDocument,
+    StoredMessage,
+    UsageEvent,
+)
 
 
 def _to_document(row: RowMapping) -> Document:
@@ -102,3 +112,150 @@ class SqlDocumentRepository:
             .returning(documents.c.id)
         )
         return result.first() is not None
+
+
+def citation_to_json(citation: Citation) -> dict[str, Any]:
+    return {
+        "index": citation.index,
+        "chunk_id": str(citation.chunk_id),
+        "document_id": str(citation.document_id),
+        "filename": citation.filename,
+        "locator": dict(citation.locator),
+        "quote": citation.quote,
+    }
+
+
+def citation_from_json(data: dict[str, Any]) -> Citation:
+    return Citation(
+        index=int(data["index"]),
+        chunk_id=UUID(data["chunk_id"]),
+        document_id=UUID(data["document_id"]),
+        filename=data["filename"],
+        locator=data["locator"],
+        quote=data["quote"],
+    )
+
+
+def _to_conversation(row: RowMapping) -> Conversation:
+    return Conversation(
+        id=row["id"],
+        owner_id=row["owner_id"],
+        title=row["title"],
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+    )
+
+
+def _to_message(row: RowMapping) -> StoredMessage:
+    return StoredMessage(
+        id=row["id"],
+        conversation_id=row["conversation_id"],
+        role=row["role"],
+        content=row["content"],
+        citations=tuple(citation_from_json(c) for c in row["citations"]),
+        refused=row["refused"],
+        refusal_reason=row["refusal_reason"],
+        created_at=row["created_at"],
+    )
+
+
+class SqlConversationRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def create(self, owner_id: str, title: str) -> Conversation:
+        result = await self._session.execute(
+            core_insert(conversations)
+            .values(owner_id=owner_id, title=title)
+            .returning(conversations)
+        )
+        return _to_conversation(result.mappings().one())
+
+    async def get(self, owner_id: str, conversation_id: UUID) -> Conversation | None:
+        result = await self._session.execute(
+            select(conversations).where(
+                conversations.c.owner_id == owner_id, conversations.c.id == conversation_id
+            )
+        )
+        row = result.mappings().first()
+        return _to_conversation(row) if row is not None else None
+
+    async def list_by_owner(
+        self, owner_id: str, *, limit: int = 50, offset: int = 0
+    ) -> list[Conversation]:
+        result = await self._session.execute(
+            select(conversations)
+            .where(conversations.c.owner_id == owner_id)
+            .order_by(conversations.c.updated_at.desc(), conversations.c.id)
+            .limit(limit)
+            .offset(offset)
+        )
+        return [_to_conversation(row) for row in result.mappings()]
+
+    async def delete(self, owner_id: str, conversation_id: UUID) -> bool:
+        result = await self._session.execute(
+            delete(conversations)
+            .where(conversations.c.owner_id == owner_id, conversations.c.id == conversation_id)
+            .returning(conversations.c.id)
+        )
+        return result.first() is not None
+
+    async def add_message(
+        self,
+        owner_id: str,
+        conversation_id: UUID,
+        *,
+        role: str,
+        content: str,
+        citations: tuple[Citation, ...] = (),
+        refused: bool = False,
+        refusal_reason: str | None = None,
+    ) -> StoredMessage:
+        result = await self._session.execute(
+            core_insert(messages)
+            .values(
+                conversation_id=conversation_id,
+                owner_id=owner_id,
+                role=role,
+                content=content,
+                citations=[citation_to_json(c) for c in citations],
+                refused=refused,
+                refusal_reason=refusal_reason,
+            )
+            .returning(messages)
+        )
+        await self._session.execute(
+            update(conversations)
+            .where(conversations.c.owner_id == owner_id, conversations.c.id == conversation_id)
+            .values(updated_at=func.now())
+        )
+        return _to_message(result.mappings().one())
+
+    async def messages(
+        self, owner_id: str, conversation_id: UUID, *, limit: int = 200
+    ) -> list[StoredMessage]:
+        newest = (
+            select(messages)
+            .where(messages.c.owner_id == owner_id, messages.c.conversation_id == conversation_id)
+            .order_by(messages.c.seq.desc())
+            .limit(limit)
+            .subquery()
+        )
+        result = await self._session.execute(select(newest).order_by(newest.c.seq))
+        return [_to_message(row) for row in result.mappings()]
+
+    async def record_usage(self, owner_id: str, event: UsageEvent) -> None:
+        await self._session.execute(
+            core_insert(usage_events).values(
+                owner_id=owner_id,
+                conversation_id=event.conversation_id,
+                mode=event.mode,
+                model=event.model,
+                refused=event.refused,
+                retrieved=event.retrieved,
+                top_cosine=event.top_cosine,
+                prompt_chars=event.prompt_chars,
+                completion_chars=event.completion_chars,
+                latency_ms=event.latency_ms,
+            )
+        )

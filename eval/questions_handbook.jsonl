@@ -1,0 +1,41 @@
+{"id": "q01", "kind": "lexical", "question": "How many days of paid annual leave does a full-time employee get?", "doc": "leave_policy.md", "gold": "24 days of paid annual leave"}
+{"id": "q02", "kind": "paraphrase", "question": "Can I roll over vacation days I did not use?", "doc": "leave_policy.md", "gold": "Up to 5 unused days"}
+{"id": "q03", "kind": "lexical", "question": "When do carried-over leave days expire?", "doc": "leave_policy.md", "gold": "31 March"}
+{"id": "q04", "kind": "paraphrase", "question": "Do I need a medical certificate for a long illness absence?", "doc": "leave_policy.md", "gold": "more than 3 consecutive days"}
+{"id": "q05", "kind": "lexical", "question": "How many weeks of parental leave does the primary caregiver get?", "doc": "leave_policy.md", "gold": "16 weeks"}
+{"id": "q06", "kind": "paraphrase", "question": "How much time off do I get when a close relative dies?", "doc": "leave_policy.md", "gold": "5 days of paid bereavement leave"}
+{"id": "q07", "kind": "lexical", "question": "How far in advance must flights be booked?", "doc": "travel_policy.md", "gold": "at least 14 days before departure"}
+{"id": "q08", "kind": "paraphrase", "question": "When am I allowed to fly business class?", "doc": "travel_policy.md", "gold": "6 hours or longer"}
+{"id": "q09", "kind": "lexical", "question": "What is the hotel limit per night in tier-1 cities?", "doc": "travel_policy.md", "gold": "180 USD per night"}
+{"id": "q10", "kind": "paraphrase", "question": "How much money do I get daily for meals while travelling?", "doc": "travel_policy.md", "gold": "per diem of 55 USD"}
+{"id": "q11", "kind": "lexical", "question": "Should I buy the optional rental car insurance?", "doc": "travel_policy.md", "gold": "Decline the optional insurance"}
+{"id": "q12", "kind": "lexical", "question": "Within how many days must expense reports be submitted?", "doc": "expense_policy.md", "gold": "within 30 days"}
+{"id": "q13", "kind": "paraphrase", "question": "Above what amount do I need to attach a receipt?", "doc": "expense_policy.md", "gold": "above 25 USD"}
+{"id": "q14", "kind": "lexical", "question": "How long until approved expenses are reimbursed?", "doc": "expense_policy.md", "gold": "within 10 business days"}
+{"id": "q15", "kind": "paraphrase", "question": "Who has to sign off on a 3,000 dollar expense?", "doc": "expense_policy.md", "gold": "Directors approve expenses up to 5,000 USD"}
+{"id": "q16", "kind": "lexical", "question": "Is alcohol reimbursable?", "doc": "expense_policy.md", "gold": "Alcohol, personal entertainment"}
+{"id": "q17", "kind": "lexical", "question": "What is the minimum password length?", "doc": "security_policy.md", "gold": "at least 14 characters"}
+{"id": "q18", "kind": "paraphrase", "question": "How often do service account credentials have to be changed?", "doc": "security_policy.md", "gold": "rotated every 90 days"}
+{"id": "q19", "kind": "lexical", "question": "How soon must a lost laptop be reported?", "doc": "security_policy.md", "gold": "within 1 hour"}
+{"id": "q20", "kind": "paraphrase", "question": "What should I do with a suspicious email?", "doc": "security_policy.md", "gold": "Report Phishing button"}
+{"id": "q21", "kind": "lexical", "question": "Are USB storage devices allowed?", "doc": "security_policy.md", "gold": "USB storage devices are blocked"}
+{"id": "q22", "kind": "lexical", "question": "How many days a week do I work from the office in the hybrid schedule?", "doc": "remote_work.md", "gold": "3 days in the office"}
+{"id": "q23", "kind": "paraphrase", "question": "Is there money to set up my home workspace?", "doc": "remote_work.md", "gold": "stipend of 400 USD"}
+{"id": "q24", "kind": "lexical", "question": "How many days can I work from another country?", "doc": "remote_work.md", "gold": "20 days per calendar year"}
+{"id": "q25", "kind": "lexical", "question": "What are the core collaboration hours?", "doc": "remote_work.md", "gold": "10:00 to 16:00"}
+{"id": "q26", "kind": "paraphrase", "question": "Who helps me with questions during my first days?", "doc": "onboarding.md", "gold": "onboarding buddy"}
+{"id": "q27", "kind": "lexical", "question": "How long is the probation period?", "doc": "onboarding.md", "gold": "6 months"}
+{"id": "q28", "kind": "lexical", "question": "How do I request system access?", "doc": "onboarding.md", "gold": "ServiceHub ticket"}
+{"id": "q29", "kind": "lexical", "question": "How quickly must the on-call engineer acknowledge a SEV1 page?", "doc": "incident_response.md", "gold": "within 5 minutes"}
+{"id": "q30", "kind": "paraphrase", "question": "How often is the public status page refreshed during an outage?", "doc": "incident_response.md", "gold": "every 30 minutes"}
+{"id": "q31", "kind": "lexical", "question": "When is the postmortem published?", "doc": "incident_response.md", "gold": "within 5 business days"}
+{"id": "q32", "kind": "lexical", "question": "How long are financial records kept?", "doc": "data_retention.md", "gold": "7 years"}
+{"id": "q33", "kind": "paraphrase", "question": "For how many days do we keep database backups?", "doc": "data_retention.md", "gold": "35 days"}
+{"id": "q34", "kind": "lexical", "question": "How long does it take to complete a customer deletion request?", "doc": "data_retention.md", "gold": "within 30 days"}
+{"id": "q35", "kind": "lexical", "question": "When are three quotes needed for a purchase?", "doc": "procurement.md", "gold": "above 10,000 USD need three written quotes"}
+{"id": "q36", "kind": "paraphrase", "question": "Which contracts need a lawyer's review before signing?", "doc": "procurement.md", "gold": "above 50,000 USD"}
+{"id": "q37", "kind": "paraphrase", "question": "What is the maximum value of a gift I may accept from a supplier?", "doc": "code_of_conduct.txt", "gold": "up to 50 USD"}
+{"id": "q38", "kind": "lexical", "question": "Is there an anonymous way to raise a concern?", "doc": "code_of_conduct.txt", "gold": "anonymous ethics hotline"}
+{"id": "q39", "kind": "exact", "question": "What does error code E-4017 mean?", "doc": "error_codes.md", "gold": "card was declined"}
+{"id": "q40", "kind": "exact", "question": "What should I do about E-5002?", "doc": "error_codes.md", "gold": "safe to retry after 30 seconds"}
+{"id": "q41", "kind": "exact", "question": "Who handles error E-6100?", "doc": "error_codes.md", "gold": "Contact the risk team"}

@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from eka.metrics import Metrics
+
 REQUEST_ID_HEADER = "X-Request-Id"
 _access_logger = logging.getLogger("eka.access")
 
@@ -32,8 +34,9 @@ def current_context() -> RequestContext | None:
 
 
 class RequestContextMiddleware:
-    def __init__(self, app: ASGIApp) -> None:
+    def __init__(self, app: ASGIApp, metrics: Metrics | None = None) -> None:
         self.app = app
+        self.metrics = metrics
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
@@ -78,4 +81,6 @@ class RequestContextMiddleware:
                     "duration_ms": round((time.perf_counter() - started) * 1000, 1),
                 },
             )
+            if self.metrics is not None and not route.startswith("/health"):
+                self.metrics.observe(scope["method"], route, status, time.perf_counter() - started)
             _current.reset(token)

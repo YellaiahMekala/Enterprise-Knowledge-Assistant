@@ -1,0 +1,131 @@
+"""Hybrid retrieval: dense and full-text candidates fused by reciprocal rank (TDD 4.6)."""
+
+import asyncio
+import re
+from collections.abc import Awaitable, Callable, Sequence
+from contextlib import AbstractAsyncContextManager
+from dataclasses import dataclass
+from typing import Literal
+from uuid import UUID
+
+from eka.domain.models import Candidate, Role, SearchFilters, SearchHit
+from eka.ports.embedder import Embedder
+from eka.ports.search import ChunkSearch
+
+MAX_QUERY_CHARS = 1000
+MAX_QUERY_TERMS = 32
+_TERM = re.compile(r"[A-Za-z0-9]+")
+
+EmbedderProvider = Callable[[], Awaitable[Embedder]]
+
+
+def sparse_query(question: str) -> str:
+    """A ``to_tsquery`` expression OR-ing the question's alphanumeric terms.
+
+    OR, because AND over a full question matches almost nothing. Only ``[A-Za-z0-9]`` is kept, so
+    user text cannot inject tsquery syntax."""
+    terms = _TERM.findall(question.lower())[:MAX_QUERY_TERMS]
+    return " | ".join(terms)
+
+
+def reciprocal_rank_fusion(rankings: Sequence[Sequence[UUID]], *, k: int) -> dict[UUID, float]:
+    """Sum ``1 / (k + rank)`` per chunk over all rankings. Ranks start at 1."""
+    scores: dict[UUID, float] = {}
+    for ranking in rankings:
+        for rank, chunk_id in enumerate(ranking, start=1):
+            scores[chunk_id] = scores.get(chunk_id, 0.0) + 1.0 / (k + rank)
+    return scores
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalSettings:
+    candidates: int = 30
+    rrf_k: int = 60
+    exact_max_chunks: int = 20_000
+    ef_search: int = 400
+    # "dense" and "sparse" exist for the E2 experiment; production uses "hybrid".
+    mode: Literal["hybrid", "dense", "sparse"] = "hybrid"
+
+
+class RetrievalService:
+    def __init__(
+        self, search: ChunkSearch, embedder: Embedder, settings: RetrievalSettings
+    ) -> None:
+        self._search = search
+        self._embedder = embedder
+        self._settings = settings
+
+    async def search(
+        self,
+        owner_id: str,
+        question: str,
+        *,
+        top_k: int,
+        filters: SearchFilters,
+    ) -> list[SearchHit]:
+        if not 1 <= len(question) <= MAX_QUERY_CHARS:
+            raise ValueError("question length out of range")
+        document_ids = await self._search.resolve_documents(owner_id, filters)
+        if document_ids is not None and not document_ids:
+            return []
+
+        vector = await asyncio.to_thread(self._embedder.embed_query, question)
+        exact = await self._search.count_chunks(owner_id) <= self._settings.exact_max_chunks
+        dense: list[Candidate] = []
+        if self._settings.mode != "sparse":
+            dense = await self._search.dense(
+                owner_id,
+                vector,
+                self._settings.candidates,
+                document_ids=document_ids,
+                exact=exact,
+                ef_search=self._settings.ef_search,
+            )
+            # The approximate path returns rows in relaxed order.
+            dense.sort(key=lambda candidate: candidate.score)
+
+        terms = sparse_query(question)
+        sparse: list[Candidate] = []
+        if terms and self._settings.mode != "dense":
+            sparse = await self._search.sparse(
+                owner_id, terms, self._settings.candidates, document_ids=document_ids
+            )
+
+        fused = reciprocal_rank_fusion(
+            [[c.chunk_id for c in dense], [c.chunk_id for c in sparse]],
+            k=self._settings.rrf_k,
+        )
+        by_id = {candidate.chunk_id: candidate for candidate in (*dense, *sparse)}
+        best = sorted(fused, key=lambda chunk_id: -fused[chunk_id])[:top_k]
+
+        similarity = {c.chunk_id: 1.0 - c.score for c in dense}
+        missing = [chunk_id for chunk_id in best if chunk_id not in similarity]
+        if missing:
+            similarity.update(await self._search.cosine(owner_id, vector, missing))
+
+        document_ids_in_hits = list({by_id[chunk_id].document_id for chunk_id in best})
+        names = await self._search.document_info(owner_id, document_ids_in_hits)
+        hits: list[SearchHit] = []
+        for chunk_id in best:
+            candidate = by_id[chunk_id]
+            if candidate.document_id not in names or chunk_id not in similarity:
+                continue
+            filename, _content_type = names[candidate.document_id]
+            hits.append(
+                SearchHit(
+                    rank=len(hits) + 1,
+                    chunk_id=chunk_id,
+                    document_id=candidate.document_id,
+                    filename=filename,
+                    locator=candidate.locator,
+                    text=candidate.text,
+                    fused=fused[chunk_id],
+                    cosine=similarity[chunk_id],
+                )
+            )
+        return hits
+
+
+RetrievalServiceFactory = Callable[
+    [str, Role, Embedder], AbstractAsyncContextManager[RetrievalService]
+]

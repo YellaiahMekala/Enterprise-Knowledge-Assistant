@@ -1,27 +1,43 @@
 """Application factory and composition root. Run with: python -m eka
 
-This module (with the worker, later) is the only place that chooses adapters.
+This module and the worker are the only places that choose adapters.
 """
 
+import asyncio
+import time
 from collections.abc import AsyncIterator
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 
 from fastapi import FastAPI
 
 from eka import __version__
+from eka.adapters.chat_fake import FakeChatModel
+from eka.adapters.chat_openai import OpenAICompatibleChat
 from eka.adapters.db.engine import Database
-from eka.adapters.db.repositories import SqlDocumentRepository
+from eka.adapters.db.repositories import SqlConversationRepository, SqlDocumentRepository
+from eka.adapters.db.search import SqlChunkSearch
 from eka.adapters.storage_local import LocalFileStore
-from eka.api import documents, health, me
+from eka.api import admin, chat, documents, health, me, search
 from eka.api.deps import DocumentServiceFactory, ReadinessCheck
 from eka.api.errors import install_error_handlers
 from eka.config import Settings, get_settings
 from eka.domain.errors import Unavailable
 from eka.domain.models import Role
 from eka.logging_config import configure_logging
+from eka.metrics import Metrics
+from eka.ports.chat import ChatModel
+from eka.ports.embedder import Embedder
 from eka.request_context import RequestContextMiddleware
 from eka.security.auth import ApiKeyAuthenticator
+from eka.security.gateway import GatewayAuthenticator
+from eka.services.answering import AnswerScope, AnswerService, AnswerSettings
 from eka.services.documents import DocumentService, UploadPolicy
+from eka.services.retrieval import (
+    EmbedderProvider,
+    RetrievalService,
+    RetrievalServiceFactory,
+    RetrievalSettings,
+)
 
 
 async def _database_not_configured() -> None:
@@ -52,10 +68,132 @@ def _document_services(settings: Settings, database: Database | None) -> Documen
     return open_for
 
 
+def _retrieval_services(settings: Settings, database: Database | None) -> RetrievalServiceFactory:
+    retrieval = RetrievalSettings(
+        candidates=settings.retrieval_candidates,
+        rrf_k=settings.rrf_k,
+        exact_max_chunks=settings.exact_search_max_chunks,
+        ef_search=settings.hnsw_ef_search,
+    )
+
+    def open_for(
+        owner_id: str, role: Role, embedder: Embedder
+    ) -> AbstractAsyncContextManager[RetrievalService]:
+        if database is None:
+            raise Unavailable("database is not configured")
+
+        @asynccontextmanager
+        async def scope() -> AsyncIterator[RetrievalService]:
+            async with database.session_for(owner_id, role) as session:
+                yield RetrievalService(SqlChunkSearch(session), embedder, retrieval)
+
+        return scope()
+
+    return open_for
+
+
+def _chat_model(settings: Settings, given: ChatModel | None) -> ChatModel:
+    """The fake model by default; a live OpenAI-compatible one only when configured."""
+    if given is not None:
+        return given
+    if settings.chat_provider == "openai":
+        assert settings.chat_model is not None and settings.chat_api_key is not None
+        return OpenAICompatibleChat(
+            base_url=settings.chat_base_url,
+            api_key=settings.chat_api_key.get_secret_value(),
+            model=settings.chat_model,
+            timeout_seconds=settings.chat_timeout_seconds,
+            retries=settings.chat_retries,
+        )
+    return FakeChatModel()
+
+
+def _answer_service(
+    settings: Settings,
+    database: Database | None,
+    model: ChatModel,
+    embedder: EmbedderProvider,
+) -> AnswerService:
+    retrieval = RetrievalSettings(
+        candidates=settings.retrieval_candidates,
+        rrf_k=settings.rrf_k,
+        exact_max_chunks=settings.exact_search_max_chunks,
+        ef_search=settings.hnsw_ef_search,
+    )
+
+    def open_for(owner_id: str, role: Role) -> AbstractAsyncContextManager[AnswerScope]:
+        if database is None:
+            raise Unavailable("database is not configured")
+
+        @asynccontextmanager
+        async def scope() -> AsyncIterator[AnswerScope]:
+            async with database.session_for(owner_id, role) as session:
+                search = SqlChunkSearch(session)
+                yield AnswerScope(
+                    conversations=SqlConversationRepository(session),
+                    retrieval=lambda embedder_: RetrievalService(search, embedder_, retrieval),
+                )
+
+        return scope()
+
+    return AnswerService(
+        open_for,
+        model,
+        embedder,
+        AnswerSettings(
+            default_mode=settings.answer_mode,
+            min_cosine=settings.refusal_min_cosine,
+            context_passages=settings.context_passages,
+            max_context_chars=settings.max_context_chars,
+            history_messages=settings.history_messages,
+            max_output_tokens=settings.max_output_tokens,
+        ),
+    )
+
+
+def _embedder_provider(settings: Settings, given: Embedder | None) -> EmbedderProvider:
+    """Returns ``given`` if set, otherwise loads the embedding model on first use."""
+    if given is not None:
+
+        async def provided() -> Embedder:
+            return given
+
+        return provided
+
+    loaded: list[Embedder] = []
+    lock = asyncio.Lock()
+
+    async def load() -> Embedder:
+        if not loaded:
+            async with lock:
+                if not loaded:
+                    # Imported here to avoid loading the ONNX runtime unless a search happens.
+                    from eka.adapters.embedder_fastembed import FastEmbedEmbedder
+
+                    loaded.append(
+                        await asyncio.to_thread(
+                            FastEmbedEmbedder,
+                            settings.embedding_model,
+                            settings.embedding_cache_dir,
+                            settings.embedding_dim,
+                        )
+                    )
+        return loaded[0]
+
+    return load
+
+
 def create_app(
-    settings: Settings | None = None, *, readiness_check: ReadinessCheck | None = None
+    settings: Settings | None = None,
+    *,
+    readiness_check: ReadinessCheck | None = None,
+    embedder: Embedder | None = None,
+    chat_model: ChatModel | None = None,
+    answer_service: AnswerService | None = None,
+    gateway_authenticator: GatewayAuthenticator | None = None,
 ) -> FastAPI:
-    """``readiness_check`` lets tests replace the database probe; production uses the database."""
+    """The keyword arguments let tests replace the database probe, the two models, or the whole
+    answer service."""
     settings = settings or get_settings()
     configure_logging(settings.log_level, json_logs=settings.log_json)
 
@@ -63,9 +201,14 @@ def create_app(
     if readiness_check is None:
         readiness_check = database.ping if database else _database_not_configured
 
+    model = _chat_model(settings, chat_model)
+    embedder_provider = _embedder_provider(settings, embedder)
+
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         yield
+        if isinstance(model, OpenAICompatibleChat):
+            await model.aclose()
         if database is not None:
             await database.dispose()
 
@@ -80,14 +223,30 @@ def create_app(
         openapi_url="/openapi.json" if docs_enabled else None,
     )
     app.state.database = database
-    app.state.authenticator = ApiKeyAuthenticator(settings.api_keys)
+    if settings.auth_mode == "gateway":
+        app.state.authenticator = gateway_authenticator or GatewayAuthenticator.from_jwks_url(
+            str(settings.gateway_jwks_url), settings.gateway_issuer, settings.gateway_audience
+        )
+    else:
+        app.state.authenticator = ApiKeyAuthenticator(settings.api_keys)
     app.state.readiness_check = readiness_check
     app.state.document_service_factory = _document_services(settings, database)
+    app.state.retrieval_service_factory = _retrieval_services(settings, database)
+    app.state.embedder_provider = embedder_provider
+    app.state.answer_service = answer_service or _answer_service(
+        settings, database, model, embedder_provider
+    )
     app.state.max_upload_bytes = settings.max_upload_bytes
 
-    app.add_middleware(RequestContextMiddleware)
+    app.state.settings = settings
+    app.state.started_at = time.monotonic()
+    app.state.metrics = Metrics()
+    app.add_middleware(RequestContextMiddleware, metrics=app.state.metrics)
     install_error_handlers(app)
     app.include_router(health.router)
     app.include_router(me.router)
+    app.include_router(admin.router)
     app.include_router(documents.router)
+    app.include_router(search.router)
+    app.include_router(chat.router)
     return app

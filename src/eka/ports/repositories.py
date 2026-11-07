@@ -7,7 +7,15 @@ without an owner does not type-check. ``tests/test_architecture.py`` asserts thi
 from typing import Protocol
 from uuid import UUID
 
-from eka.domain.models import Document, DocumentStatus, NewDocument
+from eka.domain.models import (
+    Citation,
+    Conversation,
+    Document,
+    DocumentStatus,
+    NewDocument,
+    StoredMessage,
+    UsageEvent,
+)
 
 
 class DocumentRepository(Protocol):
@@ -42,3 +50,43 @@ class DocumentRepository(Protocol):
     async def delete(self, owner_id: str, document_id: UUID) -> bool:
         """Delete the document and, by cascade, its chunks. ``False`` if there was none."""
         ...
+
+
+class ConversationRepository(Protocol):
+    async def create(self, owner_id: str, title: str) -> Conversation: ...
+
+    async def get(self, owner_id: str, conversation_id: UUID) -> Conversation | None:
+        """The owner's conversation, or ``None`` (also for another user's id)."""
+        ...
+
+    async def list_by_owner(
+        self, owner_id: str, *, limit: int = 50, offset: int = 0
+    ) -> list[Conversation]:
+        """The owner's conversations, most recently active first."""
+        ...
+
+    async def delete(self, owner_id: str, conversation_id: UUID) -> bool:
+        """Delete the conversation and, by cascade, its messages. ``False`` if there was none."""
+        ...
+
+    async def add_message(
+        self,
+        owner_id: str,
+        conversation_id: UUID,
+        *,
+        role: str,
+        content: str,
+        citations: tuple[Citation, ...] = (),
+        refused: bool = False,
+        refusal_reason: str | None = None,
+    ) -> StoredMessage:
+        """Append a message and mark the conversation as active now."""
+        ...
+
+    async def messages(
+        self, owner_id: str, conversation_id: UUID, *, limit: int = 200
+    ) -> list[StoredMessage]:
+        """The most recent ``limit`` messages, oldest first."""
+        ...
+
+    async def record_usage(self, owner_id: str, event: UsageEvent) -> None: ...

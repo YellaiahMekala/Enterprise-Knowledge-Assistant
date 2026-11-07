@@ -1,0 +1,6 @@
+plan,coverage,employee_monthly_contribution_usd,employer_monthly_contribution_usd
+Health Basic,Employee only,45,310
+Health Plus,Employee and family,120,640
+Dental,Employee and family,18,32
+Vision,Employee only,6,9
+Life Insurance,2x annual salary,0,25

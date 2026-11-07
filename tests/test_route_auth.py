@@ -39,9 +39,14 @@ def test_every_non_public_route_requires_a_key() -> None:
                 assert response.json()["type"] == "urn:eka:problem:unauthorized"
                 checked.append((method, path))
     assert ("get", "/api/v1/me") in checked  # guards against the walk silently checking nothing
-    assert {("post", "/api/v1/documents"), ("delete", "/api/v1/documents/{document_id}")} <= set(
-        checked
-    )
+    assert {
+        ("post", "/api/v1/documents"),
+        ("delete", "/api/v1/documents/{document_id}"),
+        ("post", "/api/v1/search"),
+        ("post", "/api/v1/chat"),
+        ("get", "/api/v1/conversations"),
+        ("delete", "/api/v1/conversations/{conversation_id}"),
+    } <= set(checked)
 
 
 def test_public_routes_are_exactly_the_declared_ones() -> None:
@@ -49,8 +54,14 @@ def test_public_routes_are_exactly_the_declared_ones() -> None:
     assert published >= PUBLIC_PATHS
     assert published - PUBLIC_PATHS == {
         "/api/v1/me",
+        "/api/v1/admin/status",
+        "/api/v1/admin/metrics",
         "/api/v1/documents",
         "/api/v1/documents/{document_id}",
+        "/api/v1/search",
+        "/api/v1/chat",
+        "/api/v1/conversations",
+        "/api/v1/conversations/{conversation_id}",
     }, "a new route: add it to the auth walk"
 
 

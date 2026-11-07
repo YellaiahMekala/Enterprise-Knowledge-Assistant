@@ -9,6 +9,10 @@ class Unauthorized(EkaError):
     """Missing, malformed or unknown credential."""
 
 
+class Forbidden(EkaError):
+    """Authenticated, but not allowed to do this."""
+
+
 class NotFound(EkaError):
     """Unknown id, or an id that belongs to another user (the two are indistinguishable)."""
 
@@ -53,3 +57,14 @@ class PermanentIngestionError(EkaError):
     def __init__(self, code: str) -> None:
         super().__init__(code)
         self.code = code
+
+
+# --- chat model (phase P4) ----------------------------------------------------------------------
+
+
+class ModelUnavailable(EkaError):
+    """The chat model could not produce a response (provider error, rate limit, bad reply)."""
+
+
+class ModelTimeout(EkaError):
+    """The chat model did not answer within the configured time."""

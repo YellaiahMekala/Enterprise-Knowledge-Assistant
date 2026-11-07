@@ -54,7 +54,7 @@ def test_api_keys_are_parsed_from_a_json_environment_variable(
         ({"database_url": None}, "EKA_DATABASE_URL is required"),
         ({"auth_mode": None}, "EKA_AUTH_MODE is required"),
         ({"api_keys": {}}, "EKA_API_KEYS must list at least one key"),
-        ({"auth_mode": "gateway"}, "not available yet"),
+        ({"auth_mode": "gateway"}, "EKA_GATEWAY_JWKS_URL"),
     ],
 )
 def test_startup_fails_when_half_configured_outside_test(

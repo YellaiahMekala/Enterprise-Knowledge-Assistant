@@ -126,3 +126,108 @@ class ClaimedDocument:
     content_type: str
     storage_key: str
     attempts: int
+
+
+@dataclass(frozen=True, slots=True)
+class SearchFilters:
+    """Optional search restrictions. An empty field means no restriction."""
+
+    document_ids: tuple[UUID, ...] = ()
+    content_types: tuple[str, ...] = ()
+    uploaded_after: datetime | None = None
+    uploaded_before: datetime | None = None
+
+    @property
+    def is_empty(self) -> bool:
+        return not (
+            self.document_ids or self.content_types or self.uploaded_after or self.uploaded_before
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class Candidate:
+    """One chunk from a single search path. ``score`` is a cosine distance for the dense path
+    (smaller is closer) and a text rank for the sparse path (larger is closer)."""
+
+    chunk_id: UUID
+    document_id: UUID
+    text: str
+    locator: Mapping[str, Any]
+    score: float
+
+
+@dataclass(frozen=True, slots=True)
+class SearchHit:
+    """A ranked result. ``cosine`` is the question-to-chunk similarity, always set."""
+
+    rank: int
+    chunk_id: UUID
+    document_id: UUID
+    filename: str
+    locator: Mapping[str, Any]
+    text: str
+    fused: float
+    cosine: float
+
+
+# --- answering (phase P4) ------------------------------------------------------------------------
+
+ChatRole = Literal["system", "user", "assistant"]
+AnswerMode = Literal["verified", "fast"]
+
+
+@dataclass(frozen=True, slots=True)
+class ChatMessage:
+    """One message sent to the chat model."""
+
+    role: ChatRole
+    content: str
+
+
+@dataclass(frozen=True, slots=True)
+class Citation:
+    """A passage an answer relies on. ``index`` is the number used in the answer text, as in
+    ``[2]``. It is resolved on the server from the retrieved passages, not taken from the model."""
+
+    index: int
+    chunk_id: UUID
+    document_id: UUID
+    filename: str
+    locator: Mapping[str, Any]
+    quote: str
+
+
+@dataclass(frozen=True, slots=True)
+class Conversation:
+    id: UUID
+    owner_id: str
+    title: str
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class StoredMessage:
+    id: UUID
+    conversation_id: UUID
+    role: Literal["user", "assistant"]
+    content: str
+    citations: tuple[Citation, ...]
+    refused: bool
+    refusal_reason: str | None
+    created_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class UsageEvent:
+    """What one answer cost. Counts and timings only, never text."""
+
+    conversation_id: UUID | None
+    mode: str
+    model: str
+    refused: bool
+    retrieved: int
+    top_cosine: float | None
+    prompt_chars: int
+    completion_chars: int
+    latency_ms: int

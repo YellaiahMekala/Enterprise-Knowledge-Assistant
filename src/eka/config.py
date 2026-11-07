@@ -37,8 +37,11 @@ class Settings(BaseSettings):
 
     # SQLAlchemy URL, postgresql+psycopg://... A SecretStr keeps the password out of repr().
     database_url: SecretStr | None = None
-    # Required outside environment=test. "gateway" arrives with the Java edge (phase P3b).
+    # Required outside environment=test. "gateway" trusts only tokens minted by the edge.
     auth_mode: Literal["api_key", "gateway"] | None = None
+    gateway_jwks_url: str | None = None
+    gateway_issuer: str = "eka-edge"
+    gateway_audience: str = "eka-core"
     # JSON object: {"<user-id>": {"sha256": "<hex digest>", "role": "user|admin"}}
     api_keys: dict[str, ApiKeyEntry] = Field(default_factory=dict, repr=False)
 
@@ -71,6 +74,29 @@ class Settings(BaseSettings):
     worker_max_attempts: int = Field(default=3, ge=1)
     worker_stale_claim_minutes: int = Field(default=10, ge=1)
     parse_timeout_seconds: float = Field(default=120.0, gt=0)
+    retrieval_candidates: int = Field(default=30, ge=1, le=200)
+    rrf_k: int = Field(default=60, ge=1)
+    # Owners with at most this many chunks are searched exactly.
+    exact_search_max_chunks: int = Field(default=20_000, ge=0)
+    # Spike S-2 recall@10 (3 runs): 0.64-0.69 at 100, 0.85-0.96 at 200, 1.00 at 400.
+    hnsw_ef_search: int = Field(default=400, ge=1, le=1000)
+
+    # Chat model. "fake" answers by extracting a sentence from the retrieved passages and needs
+    # no key or network; "openai" calls any OpenAI-compatible /chat/completions endpoint.
+    chat_provider: Literal["fake", "openai"] = "fake"
+    chat_base_url: str = "https://api.openai.com/v1"
+    chat_model: str | None = None  # required when chat_provider="openai"
+    chat_api_key: SecretStr | None = None  # required when chat_provider="openai"
+    chat_timeout_seconds: float = Field(default=60.0, gt=0)
+    chat_retries: int = Field(default=2, ge=0, le=5)
+    answer_mode: Literal["verified", "fast"] = "verified"
+    # 0.55 refused 2.3% of answerable and 30% of unanswerable questions on the baseline
+    # evaluation (eval report, threshold sweep); 0.60 gives 4.5% and 70%.
+    refusal_min_cosine: float = Field(default=0.55, ge=0.0, le=1.0)
+    context_passages: int = Field(default=5, ge=1, le=20)
+    max_context_chars: int = Field(default=12_000, ge=500)
+    history_messages: int = Field(default=6, ge=0, le=50)
+    max_output_tokens: int = Field(default=600, ge=16, le=4000)
 
     @field_validator("allowed_text_extensions")
     @classmethod
@@ -84,6 +110,16 @@ class Settings(BaseSettings):
     def _overlap_is_smaller_than_chunk(self) -> Self:
         if self.chunk_overlap_tokens >= self.chunk_tokens:
             raise ValueError("EKA_CHUNK_OVERLAP_TOKENS must be smaller than EKA_CHUNK_TOKENS")
+        return self
+
+    @model_validator(mode="after")
+    def _live_chat_needs_a_model_and_a_key(self) -> Self:
+        if self.chat_provider == "openai" and (
+            self.chat_model is None or self.chat_api_key is None
+        ):
+            raise ValueError(
+                "EKA_CHAT_MODEL and EKA_CHAT_API_KEY are required for the openai provider"
+            )
         return self
 
     @property
@@ -126,7 +162,9 @@ class Settings(BaseSettings):
         if self.auth_mode is None:
             raise ValueError("EKA_AUTH_MODE is required outside environment=test")
         if self.auth_mode == "gateway":
-            raise ValueError("EKA_AUTH_MODE=gateway is not available yet (phase P3b)")
+            if not self.gateway_jwks_url:
+                raise ValueError("EKA_GATEWAY_JWKS_URL is required when EKA_AUTH_MODE=gateway")
+            return self
         if not self.api_keys:
             raise ValueError("EKA_API_KEYS must list at least one key when EKA_AUTH_MODE=api_key")
         return self

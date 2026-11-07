@@ -15,6 +15,9 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from eka.api.schemas import PROBLEM_MEDIA_TYPE
 from eka.domain.errors import (
+    Forbidden,
+    ModelTimeout,
+    ModelUnavailable,
     NotFound,
     PayloadTooLarge,
     QuotaExceeded,
@@ -37,6 +40,8 @@ _HTTP_SLUGS = {
     415: "unsupported-media-type",
     422: "validation",
     429: "rate-limited",
+    502: "bad-gateway",
+    504: "gateway-timeout",
 }
 _UNAUTHORIZED_DETAIL = "A valid API key is required."
 _AUTH_CHALLENGE = {"WWW-Authenticate": "ApiKey"}
@@ -95,6 +100,10 @@ def install_error_handlers(app: FastAPI) -> None:
             extra={"reason": exc.reason},
         )
 
+    @app.exception_handler(Forbidden)
+    async def _forbidden(request: Request, exc: Forbidden) -> JSONResponse:
+        return problem(request, 403, detail="You are not allowed to do this.")
+
     @app.exception_handler(PayloadTooLarge)
     async def _too_large(request: Request, exc: PayloadTooLarge) -> JSONResponse:
         return problem(request, 413, detail="The file is larger than the allowed size.")
@@ -106,6 +115,25 @@ def install_error_handlers(app: FastAPI) -> None:
             403,
             slug="quota-exceeded",
             detail="The maximum number of documents has been reached. Delete one first.",
+        )
+
+    @app.exception_handler(ModelUnavailable)
+    async def _model_unavailable(request: Request, exc: ModelUnavailable) -> JSONResponse:
+        logger.warning("chat model unavailable: %s", exc)
+        return problem(
+            request,
+            502,
+            slug="model-unavailable",
+            detail="The language model could not answer. Try again shortly.",
+        )
+
+    @app.exception_handler(ModelTimeout)
+    async def _model_timeout(request: Request, exc: ModelTimeout) -> JSONResponse:
+        return problem(
+            request,
+            504,
+            slug="model-timeout",
+            detail="The language model took too long to answer. Try again.",
         )
 
     @app.exception_handler(RequestValidationError)

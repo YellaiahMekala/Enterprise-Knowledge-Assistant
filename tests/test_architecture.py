@@ -14,8 +14,8 @@ from eka.ports import repositories as repository_ports
 SRC = Path(__file__).resolve().parents[1] / "src" / "eka"
 
 # Package -> the eka packages it may import. Third-party imports are allowed only where listed
-# in THIRD_PARTY_OK (the "vendor SDK" rule). Top-level modules (config, request_context, the
-# package itself) are shared by every layer and are not restricted here.
+# in THIRD_PARTY_OK (the "vendor SDK" rule). Top-level modules (config, request_context,
+# metrics, the package itself) are shared by every layer and are not restricted here.
 ALLOWED_EKA = {
     "domain": set(),
     "ports": {"domain"},
@@ -25,7 +25,7 @@ ALLOWED_EKA = {
     "security": {"domain"},
     "api": {"services", "domain", "security"},
 }
-SHARED_TOP_LEVEL = {"config", "request_context", "logging_config"}
+SHARED_TOP_LEVEL = {"config", "request_context", "logging_config", "metrics"}
 # Packages that may use third-party libraries. domain, ports and services may not.
 THIRD_PARTY_OK = {"adapters", "api", "security", "ingestion"}
 # Third-party libraries each of those may use is deliberately not narrowed further yet.

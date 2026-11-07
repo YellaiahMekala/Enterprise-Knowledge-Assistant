@@ -8,10 +8,13 @@ BAAI/bge-small-en-v1.5 (ADR-005).
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     Column,
     Computed,
     DateTime,
+    Double,
     ForeignKey,
+    Identity,
     Index,
     Integer,
     MetaData,
@@ -88,3 +91,59 @@ Index(
     postgresql_ops={"embedding": "vector_cosine_ops"},
 )
 Index("chunks_tsv_gin", chunks.c.tsv, postgresql_using="gin")
+
+conversations = Table(
+    "conversations",
+    metadata,
+    Column("id", Uuid, primary_key=True, server_default=text("gen_random_uuid()")),
+    Column("owner_id", Text, nullable=False),
+    Column("title", Text, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+)
+Index("conversations_owner_updated", conversations.c.owner_id, conversations.c.updated_at.desc())
+
+messages = Table(
+    "messages",
+    metadata,
+    Column("id", Uuid, primary_key=True, server_default=text("gen_random_uuid()")),
+    Column("seq", BigInteger, Identity(always=True), nullable=False),
+    Column(
+        "conversation_id",
+        Uuid,
+        ForeignKey("conversations.id", ondelete="CASCADE", name="messages_conversation_id_fkey"),
+        nullable=False,
+    ),
+    Column("owner_id", Text, nullable=False),
+    Column("role", Text, nullable=False),
+    Column("content", Text, nullable=False),
+    Column("citations", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
+    Column("refused", Boolean, nullable=False, server_default=text("false")),
+    Column("refusal_reason", Text),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+)
+Index("messages_conversation_seq", messages.c.conversation_id, messages.c.seq)
+
+usage_events = Table(
+    "usage_events",
+    metadata,
+    Column("id", Uuid, primary_key=True, server_default=text("gen_random_uuid()")),
+    Column("owner_id", Text, nullable=False),
+    Column(
+        "conversation_id",
+        Uuid,
+        ForeignKey(
+            "conversations.id", ondelete="SET NULL", name="usage_events_conversation_id_fkey"
+        ),
+    ),
+    Column("mode", Text, nullable=False),
+    Column("model", Text, nullable=False),
+    Column("refused", Boolean, nullable=False),
+    Column("retrieved", Integer, nullable=False),
+    Column("top_cosine", Double),
+    Column("prompt_chars", Integer, nullable=False),
+    Column("completion_chars", Integer, nullable=False),
+    Column("latency_ms", Integer, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+)
+Index("usage_events_owner_created", usage_events.c.owner_id, usage_events.c.created_at.desc())
