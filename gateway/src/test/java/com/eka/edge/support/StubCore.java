@@ -11,6 +11,8 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -41,6 +43,8 @@ public final class StubCore implements AutoCloseable {
     private static final long HANG_MS = 6_000;
 
     private final HttpServer server;
+    // The default executor runs one request at a time, so a hung request would stall every later one.
+    private final ExecutorService workers = Executors.newCachedThreadPool();
     private final List<Received> received = Collections.synchronizedList(new ArrayList<>());
     private final AtomicLong streamStartedAt = new AtomicLong();
     private final AtomicLong streamCompletedAt = new AtomicLong();
@@ -53,6 +57,7 @@ public final class StubCore implements AutoCloseable {
         } catch (IOException e) {
             throw new IllegalStateException(e);
         }
+        server.setExecutor(workers);
         server.createContext("/", this::handle);
         server.start();
     }
@@ -160,5 +165,6 @@ public final class StubCore implements AutoCloseable {
     @Override
     public void close() {
         server.stop(0);
+        workers.shutdownNow();
     }
 }
