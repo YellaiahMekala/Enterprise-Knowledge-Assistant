@@ -18,6 +18,33 @@ spring:
               uri: ${eka.edge.core-url}
               predicates:
                 - Path=/api/**
+              filters:
+                # Stops sending traffic to a core that keeps failing, so callers get a fast 503
+                # instead of waiting for a timeout each time.
+                - name: CircuitBreaker
+                  args:
+                    name: core
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        sliding-window-size: ${EKA_EDGE_CB_WINDOW:20}
+        minimum-number-of-calls: ${EKA_EDGE_CB_MIN_CALLS:10}
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: ${EKA_EDGE_CB_OPEN_FOR:30s}
+        permitted-number-of-calls-in-half-open-state: 3
+    instances:
+      core:
+        base-config: default
+  timelimiter:
+    # Answers can stream for a long time; the HTTP client's response timeout is the limit.
+    configs:
+      default:
+        timeout-duration: 10m
+    instances:
+      core:
+        base-config: default
 
 management:
   # A separate port: health probes and the internal key set are not served to the public.

@@ -1,0 +1,68 @@
+{
+  "realm": "eka",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "accessTokenLifespan": 900,
+  "roles": {
+    "realm": [{ "name": "eka-admin", "description": "Can read the admin endpoints" }]
+  },
+  "clients": [
+    {
+      "clientId": "eka-ui",
+      "name": "EKA web UI",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": ["http://localhost:4200/*"],
+      "webOrigins": ["http://localhost:4200"],
+      "attributes": { "pkce.code.challenge.method": "S256" },
+      "protocolMappers": [
+        {
+          "name": "audience-eka-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "eka-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        },
+        {
+          "name": "realm-roles-as-roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "config": {
+            "claim.name": "roles",
+            "multivalued": "true",
+            "jsonType.label": "String",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "alice",
+      "enabled": true,
+      "email": "alice@example.test",
+      "emailVerified": true,
+      "firstName": "Alice",
+      "lastName": "User",
+      "credentials": [{ "type": "password", "value": "${KC_ALICE_PASSWORD}", "temporary": false }]
+    },
+    {
+      "username": "boss",
+      "enabled": true,
+      "email": "boss@example.test",
+      "emailVerified": true,
+      "firstName": "Boss",
+      "lastName": "Admin",
+      "realmRoles": ["eka-admin"],
+      "credentials": [{ "type": "password", "value": "${KC_BOSS_PASSWORD}", "temporary": false }]
+    }
+  ]
+}

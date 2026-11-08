@@ -2,6 +2,7 @@
 # Settings come from a git-ignored .env file (copy .env.example); nothing secret is stored here.
 services:
   db:
+    mem_limit: 1g
     # Exact tag, not "pg17": pgvector 0.8.7 on PostgreSQL 17.11 was recorded in phase P1.
     image: pgvector/pgvector:0.8.7-pg17
     environment:
@@ -22,6 +23,7 @@ services:
 
   # Applies the schema once, then exits. The API and the worker start only after it succeeded.
   migrate:
+    mem_limit: 512m
     build: .
     command: ["alembic", "upgrade", "head"]
     restart: "no"
@@ -32,6 +34,7 @@ services:
       EKA_DATABASE_URL: postgresql+psycopg://eka:${EKA_DB_PASSWORD}@db:5432/eka
 
   api:
+    mem_limit: 1g
     build: .
     depends_on:
       migrate:
@@ -50,6 +53,7 @@ services:
   # Parses, chunks and embeds uploaded documents. Downloads the embedding model (about 200 MB)
   # into the eka-models volume on its first start; later starts reuse it.
   worker:
+    mem_limit: 2g
     build: .
     command: ["python", "-m", "eka.worker"]
     # The image's HTTP health check does not apply: the worker serves no HTTP. Its progress shows
@@ -71,6 +75,7 @@ services:
   # edge signed, and is not published to the host. Needs an OIDC provider (EKA_EDGE_OIDC_*);
   # the edge refuses to start without them.
   core-behind-edge:
+    mem_limit: 1g
     profiles: [edge]
     build: .
     depends_on:
@@ -85,6 +90,7 @@ services:
       - eka-files:/data/files
 
   edge:
+    mem_limit: 768m
     profiles: [edge]
     build: ./gateway
     depends_on:
@@ -92,6 +98,7 @@ services:
     ports:
       - "8080:8080"
     environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75"
       EKA_EDGE_CORE_URL: http://core-behind-edge:8000
       EKA_EDGE_PSEUDONYM_SECRET: ${EKA_EDGE_PSEUDONYM_SECRET:-}
       EKA_EDGE_OIDC_ISSUER: ${EKA_EDGE_OIDC_ISSUER:-}
@@ -100,19 +107,88 @@ services:
       EKA_EDGE_SIGNING_KEY_FILE: ${EKA_EDGE_SIGNING_KEY_FILE:-}
       EKA_EDGE_EPHEMERAL_KEY: ${EKA_EDGE_EPHEMERAL_KEY:-true}
 
+  # Identity provider profile: `docker compose --profile idp up -d keycloak`. Imports the eka realm
+  # (keycloak/realm-eka.json) with two test users. Passwords come from .env, not from the file.
+  # Tokens carry the issuer http://keycloak:8180/realms/eka whichever host name the caller used,
+  # so add `127.0.0.1 keycloak` to your hosts file to open the admin console by that name.
+  keycloak:
+    profiles: [idp]
+    image: quay.io/keycloak/keycloak:26.3
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_HTTP_PORT: "8180"
+      KC_HOSTNAME: http://keycloak:8180
+      KC_HEALTH_ENABLED: "true"
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${EKA_KEYCLOAK_ADMIN_PASSWORD:-}
+      KC_ALICE_PASSWORD: ${EKA_KEYCLOAK_ALICE_PASSWORD:-}
+      KC_BOSS_PASSWORD: ${EKA_KEYCLOAK_BOSS_PASSWORD:-}
+    volumes:
+      - ./keycloak/realm-eka.json:/opt/keycloak/data/import/realm-eka.json:ro
+    ports:
+      - "127.0.0.1:8180:8180"
+
   # Monitoring profile: `docker compose --profile monitoring up`. Put an admin API key (the
   # plain key, not its hash) in monitoring/secrets/admin_key; that folder is git-ignored.
   # Set EKA_GRAFANA_PASSWORD; if empty, Grafana keeps its default login (loopback only).
   prometheus:
+    mem_limit: 512m
     profiles: [monitoring]
     image: prom/prometheus:v3.5.0
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
       - ./monitoring/secrets:/etc/prometheus/secrets:ro
     ports:
       - "127.0.0.1:9090:9090"
 
+  alertmanager:
+    mem_limit: 128m
+    profiles: [monitoring]
+    image: prom/alertmanager:v0.28.1
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./monitoring/secrets:/etc/alertmanager/secrets:ro
+    ports:
+      - "127.0.0.1:9093:9093"
+
+  # Agent profile: `docker compose --profile monitoring --profile agent up -d`.
+  # Receives Alertmanager webhooks, investigates with read-only tools, emails a report.
+  ops-agent:
+    profiles: [agent]
+    build: ./ops-agent
+    mem_limit: 512m
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70"
+      OPS_AGENT_WEBHOOK_TOKEN: ${OPS_AGENT_WEBHOOK_TOKEN:-}
+      OPS_AGENT_PROMETHEUS_URL: http://prometheus:9090
+      OPS_AGENT_CORE_URL: http://core-behind-edge:8000
+      OPS_AGENT_EDGE_MANAGEMENT_URL: http://edge:8081
+      OPS_AGENT_RUNBOOK_FILE: /app/runbooks.md
+      EKA_ALERT_EMAIL_TO: ${EKA_ALERT_EMAIL_TO:-}
+      EKA_ALERT_EMAIL_FROM: ${EKA_ALERT_EMAIL_FROM:-}
+      EKA_ALERT_SMTP_HOST: ${EKA_ALERT_SMTP_HOST:-mailpit}
+      EKA_ALERT_SMTP_PORT: ${EKA_ALERT_SMTP_PORT:-1025}
+      EKA_ALERT_SMTP_USER: ${EKA_ALERT_SMTP_USER:-}
+      EKA_ALERT_SMTP_PASSWORD: ${EKA_ALERT_SMTP_PASSWORD:-}
+      EKA_ALERT_SMTP_AUTH: ${EKA_ALERT_SMTP_AUTH:-false}
+      EKA_CHAT_API_KEY: ${EKA_CHAT_API_KEY:-}
+      EKA_CHAT_MODEL: ${EKA_CHAT_MODEL:-gpt-4o-mini}
+    volumes:
+      - ./docs/runbooks.md:/app/runbooks.md:ro
+    ports:
+      - "127.0.0.1:8090:8090"
+
+  # A local mail catcher for trying the agent without real SMTP: web UI on http://localhost:8025.
+  mailpit:
+    mem_limit: 128m
+    profiles: [agent]
+    image: axllent/mailpit:v1.27
+    ports:
+      - "127.0.0.1:8025:8025"
+
   grafana:
+    mem_limit: 512m
     profiles: [monitoring]
     image: grafana/grafana:12.1.0
     depends_on:

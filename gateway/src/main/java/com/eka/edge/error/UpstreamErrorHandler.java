@@ -1,5 +1,7 @@
 package com.eka.edge.error;
 
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import org.springframework.cloud.gateway.support.ServiceUnavailableException;
 import io.netty.handler.timeout.TimeoutException;
 import java.net.ConnectException;
 import java.net.UnknownHostException;
@@ -46,6 +48,9 @@ public class UpstreamErrorHandler implements WebExceptionHandler {
     /** Null when the failure is not about reaching the core. */
     static Mapped map(Throwable error) {
         for (Throwable t = error; t != null; t = t.getCause()) {
+            if (t instanceof CallNotPermittedException || t instanceof ServiceUnavailableException) {
+                return new Mapped(HttpStatus.SERVICE_UNAVAILABLE, "circuit-open", "The service is recovering. Try again shortly.");
+            }
             if (t instanceof TimeoutException || t instanceof java.util.concurrent.TimeoutException) {
                 return new Mapped(HttpStatus.GATEWAY_TIMEOUT, "gateway-timeout", "The service took too long to answer.");
             }

@@ -28,6 +28,13 @@ class UpstreamErrorMappingTest {
     }
 
     @Test
+    void anOpenCircuitIsServiceUnavailableWithItsOwnSlug() {
+        var open = new org.springframework.cloud.gateway.support.ServiceUnavailableException();
+        assertThat(UpstreamErrorHandler.map(open).status()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        assertThat(UpstreamErrorHandler.map(open).slug()).isEqualTo("circuit-open");
+    }
+
+    @Test
     void gatewayStatusesFromTheRoutingLayerAreKept() {
         var error = new ResponseStatusException(HttpStatus.GATEWAY_TIMEOUT);
         assertThat(UpstreamErrorHandler.map(error).slug()).isEqualTo("gateway-timeout");

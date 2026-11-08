@@ -1,0 +1,52 @@
+# Alert rules and SLO recording rules. Runbooks: docs/runbooks.md (anchor = alert name, lower case).
+# Unit tests: alerts.test.yml, run with `promtool test rules monitoring/alerts.test.yml`.
+#
+# SLOs (30-day window, measured at the core):
+#   availability  99.5% of requests do not end in a 5xx
+#   latency       95% of search requests finish within 1 s
+groups:
+  - name: eka-slo
+    rules:
+      - record: eka:requests:rate5m
+        expr: sum(rate(eka_http_requests_total[5m]))
+      - record: eka:errors:rate5m
+        expr: sum(rate(eka_http_requests_total{status=~"5.."}[5m]))
+      - record: eka:error_ratio:rate5m
+        expr: eka:errors:rate5m / eka:requests:rate5m
+      - record: eka:search_latency_p95:5m
+        expr: histogram_quantile(0.95, sum by (le) (rate(eka_http_request_duration_seconds_bucket{route="/api/v1/search"}[5m])))
+
+  - name: eka-alerts
+    rules:
+      # 14.4x the error budget (0.5%) burns 2% of a 30-day budget in an hour.
+      - alert: EkaHighErrorRate
+        expr: eka:error_ratio:rate5m > 14.4 * 0.005 and eka:requests:rate5m > 0.1
+        for: 5m
+        labels: {severity: page}
+        annotations:
+          summary: "More than 7.2% of core requests are failing with 5xx"
+          runbook: "docs/runbooks.md#ekahigherrorrate"
+
+      - alert: EkaSearchSlow
+        expr: eka:search_latency_p95:5m > 1
+        for: 10m
+        labels: {severity: ticket}
+        annotations:
+          summary: "Search p95 latency is above 1 s"
+          runbook: "docs/runbooks.md#ekasearchslow"
+
+      - alert: EkaTargetDown
+        expr: up{job=~"core|edge"} == 0
+        for: 2m
+        labels: {severity: page}
+        annotations:
+          summary: "Prometheus cannot scrape {{ $labels.job }}"
+          runbook: "docs/runbooks.md#ekatargetdown"
+
+      - alert: EkaEdgeCircuitOpen
+        expr: resilience4j_circuitbreaker_state{name="core",state="open"} == 1
+        for: 1m
+        labels: {severity: page}
+        annotations:
+          summary: "The edge has stopped sending traffic to the core"
+          runbook: "docs/runbooks.md#ekaedgecircuitopen"

@@ -1,0 +1,75 @@
+rule_files: [alerts.yml]
+evaluation_interval: 1m
+
+tests:
+  - name: errors above the burn rate page, a quiet service does not
+    interval: 1m
+    input_series:
+      - series: 'eka_http_requests_total{method="POST",route="/api/v1/chat",status="200"}'
+        values: '0+540x20'
+      - series: 'eka_http_requests_total{method="POST",route="/api/v1/chat",status="500"}'
+        values: '0+60x20'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: EkaHighErrorRate
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: EkaHighErrorRate
+        exp_alerts:
+          - exp_labels: {severity: page}
+            exp_annotations:
+              summary: "More than 7.2% of core requests are failing with 5xx"
+              runbook: "docs/runbooks.md#ekahigherrorrate"
+
+  - name: a low error ratio does not page
+    interval: 1m
+    input_series:
+      - series: 'eka_http_requests_total{method="POST",route="/api/v1/chat",status="200"}'
+        values: '0+995x20'
+      - series: 'eka_http_requests_total{method="POST",route="/api/v1/chat",status="500"}'
+        values: '0+5x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: EkaHighErrorRate
+        exp_alerts: []
+
+  - name: slow search raises a ticket
+    interval: 1m
+    input_series:
+      - series: 'eka_http_request_duration_seconds_bucket{route="/api/v1/search",le="1"}'
+        values: '0+10x30'
+      - series: 'eka_http_request_duration_seconds_bucket{route="/api/v1/search",le="2.5"}'
+        values: '0+100x30'
+      - series: 'eka_http_request_duration_seconds_bucket{route="/api/v1/search",le="+Inf"}'
+        values: '0+100x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: EkaSearchSlow
+        exp_alerts:
+          - exp_labels: {severity: ticket}
+            exp_annotations:
+              summary: "Search p95 latency is above 1 s"
+              runbook: "docs/runbooks.md#ekasearchslow"
+
+  - name: a missing target and an open circuit page
+    interval: 1m
+    input_series:
+      - series: 'up{job="core",instance="api:8000"}'
+        values: '0x5'
+      - series: 'resilience4j_circuitbreaker_state{name="core",state="open"}'
+        values: '1x5'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: EkaTargetDown
+        exp_alerts:
+          - exp_labels: {severity: page, job: core, instance: "api:8000"}
+            exp_annotations:
+              summary: "Prometheus cannot scrape core"
+              runbook: "docs/runbooks.md#ekatargetdown"
+      - eval_time: 3m
+        alertname: EkaEdgeCircuitOpen
+        exp_alerts:
+          - exp_labels: {severity: page, name: core, state: open}
+            exp_annotations:
+              summary: "The edge has stopped sending traffic to the core"
+              runbook: "docs/runbooks.md#ekaedgecircuitopen"

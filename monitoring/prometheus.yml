@@ -1,6 +1,14 @@
 global:
   scrape_interval: 15s
 
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
 scrape_configs:
   # The core's metrics are admin-only; the admin key is read from a file that is not in git.
   - job_name: core
