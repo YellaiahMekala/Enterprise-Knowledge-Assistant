@@ -1,6 +1,7 @@
 """Retrieval logic against an in-memory search port."""
 
 import uuid
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -233,3 +234,65 @@ async def test_mode_selects_which_paths_run(mode: str, dense_calls: int, sparse_
     assert (search.dense_calls, search.sparse_calls) == (dense_calls, sparse_calls)
     assert hits, "every mode still returns the matching chunk, with a cosine for the gate"
     assert hits[0].cosine is not None
+
+
+class _KeywordReranker:
+    """Scores a passage by how many times a marker word appears, so the order is predictable."""
+
+    model_name = "test-reranker"
+
+    def __init__(self, marker: str) -> None:
+        self._marker = marker
+        self.calls: list[list[str]] = []
+
+    def score(self, query: str, passages: Sequence[str]) -> list[float]:
+        self.calls.append(list(passages))
+        return [float(p.count(self._marker)) for p in passages]
+
+
+def _three_leave_chunks() -> InMemoryChunkSearch:
+    search = InMemoryChunkSearch()
+    doc = uuid.uuid4()
+    search.add_document("alice", doc, "leave.md")
+    for text in ("leave rules apply", "leave leave leave days", "leave days carry over"):
+        search.add_chunk("alice", doc, text, vec("carry over leave"))
+    return search
+
+
+@pytest.mark.anyio
+async def test_a_reranker_reorders_the_head_of_the_fused_list() -> None:
+    reranker = _KeywordReranker("leave")
+    service = RetrievalService(
+        _three_leave_chunks(), EMBED, RetrievalSettings(candidates=10), reranker
+    )
+
+    hits = await service.search("alice", "carry over leave", top_k=3, filters=SearchFilters())
+
+    assert hits[0].text == "leave leave leave days"
+    assert [h.rank for h in hits] == [1, 2, 3]
+    assert len(reranker.calls) == 1 and len(reranker.calls[0]) == 3
+
+
+@pytest.mark.anyio
+async def test_only_rerank_top_candidates_are_rescored() -> None:
+    reranker = _KeywordReranker("leave")
+    service = RetrievalService(
+        _three_leave_chunks(), EMBED, RetrievalSettings(candidates=10, rerank_top=2), reranker
+    )
+
+    hits = await service.search("alice", "carry over leave", top_k=3, filters=SearchFilters())
+
+    assert len(reranker.calls[0]) == 2
+    assert len(hits) == 3
+
+
+@pytest.mark.anyio
+async def test_without_a_reranker_the_order_is_the_fused_order() -> None:
+    search = _three_leave_chunks()
+    plain = await make_service(search).search(
+        "alice", "carry over leave", top_k=3, filters=SearchFilters()
+    )
+    ranked = await RetrievalService(search, EMBED, RetrievalSettings(candidates=10), None).search(
+        "alice", "carry over leave", top_k=3, filters=SearchFilters()
+    )
+    assert [h.chunk_id for h in plain] == [h.chunk_id for h in ranked]

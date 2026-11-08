@@ -10,6 +10,7 @@ from uuid import UUID
 
 from eka.domain.models import Candidate, Role, SearchFilters, SearchHit
 from eka.ports.embedder import Embedder
+from eka.ports.reranker import Reranker
 from eka.ports.search import ChunkSearch
 
 MAX_QUERY_CHARS = 1000
@@ -45,15 +46,22 @@ class RetrievalSettings:
     ef_search: int = 400
     # "dense" and "sparse" exist for the E2 experiment; production uses "hybrid".
     mode: Literal["hybrid", "dense", "sparse"] = "hybrid"
+    # With a reranker, this many top fused candidates are re-scored and re-ordered (experiment E3).
+    rerank_top: int = 20
 
 
 class RetrievalService:
     def __init__(
-        self, search: ChunkSearch, embedder: Embedder, settings: RetrievalSettings
+        self,
+        search: ChunkSearch,
+        embedder: Embedder,
+        settings: RetrievalSettings,
+        reranker: Reranker | None = None,
     ) -> None:
         self._search = search
         self._embedder = embedder
         self._settings = settings
+        self._reranker = reranker
 
     async def search(
         self,
@@ -96,7 +104,10 @@ class RetrievalService:
             k=self._settings.rrf_k,
         )
         by_id = {candidate.chunk_id: candidate for candidate in (*dense, *sparse)}
-        best = sorted(fused, key=lambda chunk_id: -fused[chunk_id])[:top_k]
+        ordered = sorted(fused, key=lambda chunk_id: -fused[chunk_id])
+        if self._reranker is not None and ordered:
+            ordered = await self._rerank(question, ordered, by_id)
+        best = ordered[:top_k]
 
         similarity = {c.chunk_id: 1.0 - c.score for c in dense}
         missing = [chunk_id for chunk_id in best if chunk_id not in similarity]
@@ -124,6 +135,21 @@ class RetrievalService:
                 )
             )
         return hits
+
+    async def _rerank(
+        self, question: str, ordered: list[UUID], by_id: dict[UUID, Candidate]
+    ) -> list[UUID]:
+        """Re-order the head of the fused list by cross-encoder score. The tail keeps its order.
+        ``fused`` stays the RRF score, so the answer step and the refusal gate are unaffected."""
+        assert self._reranker is not None
+        head = ordered[: self._settings.rerank_top]
+        scores = await asyncio.to_thread(
+            self._reranker.score, question, [by_id[chunk_id].text for chunk_id in head]
+        )
+        reranked = [
+            chunk_id for _, chunk_id in sorted(zip(scores, head, strict=True), key=lambda p: -p[0])
+        ]
+        return reranked + ordered[len(head) :]
 
 
 RetrievalServiceFactory = Callable[

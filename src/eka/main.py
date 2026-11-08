@@ -11,12 +11,14 @@ from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from fastapi import FastAPI
 
 from eka import __version__
+from eka.adapters.chat_bedrock import BedrockChat
 from eka.adapters.chat_fake import FakeChatModel
 from eka.adapters.chat_openai import OpenAICompatibleChat
 from eka.adapters.db.engine import Database
 from eka.adapters.db.repositories import SqlConversationRepository, SqlDocumentRepository
 from eka.adapters.db.search import SqlChunkSearch
-from eka.adapters.storage_local import LocalFileStore
+from eka.adapters.reranker_fastembed import FastEmbedReranker
+from eka.adapters.storage import build_file_store
 from eka.api import admin, chat, documents, health, me, search
 from eka.api.deps import DocumentServiceFactory, ReadinessCheck
 from eka.api.errors import install_error_handlers
@@ -27,6 +29,7 @@ from eka.logging_config import configure_logging
 from eka.metrics import Metrics
 from eka.ports.chat import ChatModel
 from eka.ports.embedder import Embedder
+from eka.ports.reranker import Reranker
 from eka.request_context import RequestContextMiddleware
 from eka.security.auth import ApiKeyAuthenticator
 from eka.security.gateway import GatewayAuthenticator
@@ -46,7 +49,7 @@ async def _database_not_configured() -> None:
 
 def _document_services(settings: Settings, database: Database | None) -> DocumentServiceFactory:
     """The one place that picks the adapters behind the document service."""
-    store = LocalFileStore(settings.storage_local_dir)
+    store = build_file_store(settings)
     policy = UploadPolicy(
         max_upload_bytes=settings.max_upload_bytes,
         max_documents=settings.max_docs_per_user,
@@ -68,13 +71,21 @@ def _document_services(settings: Settings, database: Database | None) -> Documen
     return open_for
 
 
+def _reranker(settings: Settings) -> Reranker | None:
+    if settings.reranker_model is None:
+        return None
+    return FastEmbedReranker(settings.reranker_model, settings.embedding_cache_dir)
+
+
 def _retrieval_services(settings: Settings, database: Database | None) -> RetrievalServiceFactory:
     retrieval = RetrievalSettings(
         candidates=settings.retrieval_candidates,
         rrf_k=settings.rrf_k,
         exact_max_chunks=settings.exact_search_max_chunks,
         ef_search=settings.hnsw_ef_search,
+        rerank_top=settings.reranker_top,
     )
+    reranker = _reranker(settings)
 
     def open_for(
         owner_id: str, role: Role, embedder: Embedder
@@ -85,7 +96,7 @@ def _retrieval_services(settings: Settings, database: Database | None) -> Retrie
         @asynccontextmanager
         async def scope() -> AsyncIterator[RetrievalService]:
             async with database.session_for(owner_id, role) as session:
-                yield RetrievalService(SqlChunkSearch(session), embedder, retrieval)
+                yield RetrievalService(SqlChunkSearch(session), embedder, retrieval, reranker)
 
         return scope()
 
@@ -93,7 +104,7 @@ def _retrieval_services(settings: Settings, database: Database | None) -> Retrie
 
 
 def _chat_model(settings: Settings, given: ChatModel | None) -> ChatModel:
-    """The fake model by default; a live OpenAI-compatible one only when configured."""
+    """The fake model by default; a live one (OpenAI-compatible or Bedrock) only when configured."""
     if given is not None:
         return given
     if settings.chat_provider == "openai":
@@ -102,6 +113,14 @@ def _chat_model(settings: Settings, given: ChatModel | None) -> ChatModel:
             base_url=settings.chat_base_url,
             api_key=settings.chat_api_key.get_secret_value(),
             model=settings.chat_model,
+            timeout_seconds=settings.chat_timeout_seconds,
+            retries=settings.chat_retries,
+        )
+    if settings.chat_provider == "bedrock":
+        assert settings.chat_model is not None
+        return BedrockChat(
+            model_id=settings.chat_model,
+            region=settings.bedrock_region,
             timeout_seconds=settings.chat_timeout_seconds,
             retries=settings.chat_retries,
         )
@@ -119,7 +138,9 @@ def _answer_service(
         rrf_k=settings.rrf_k,
         exact_max_chunks=settings.exact_search_max_chunks,
         ef_search=settings.hnsw_ef_search,
+        rerank_top=settings.reranker_top,
     )
+    reranker = _reranker(settings)
 
     def open_for(owner_id: str, role: Role) -> AbstractAsyncContextManager[AnswerScope]:
         if database is None:
@@ -131,7 +152,9 @@ def _answer_service(
                 search = SqlChunkSearch(session)
                 yield AnswerScope(
                     conversations=SqlConversationRepository(session),
-                    retrieval=lambda embedder_: RetrievalService(search, embedder_, retrieval),
+                    retrieval=lambda embedder_: RetrievalService(
+                        search, embedder_, retrieval, reranker
+                    ),
                 )
 
         return scope()

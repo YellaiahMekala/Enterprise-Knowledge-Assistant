@@ -46,8 +46,15 @@ class Settings(BaseSettings):
     api_keys: dict[str, ApiKeyEntry] = Field(default_factory=dict, repr=False)
 
     # --- storage and ingestion (phase P2) ---
-    storage_backend: Literal["local"] = "local"  # "s3" arrives in phase P9
+    storage_backend: Literal["local", "s3"] = "local"
     storage_local_dir: Path = Path("./data/files")
+    # S3 (or an S3-compatible server such as MinIO). Without keys, boto3 uses its normal credential
+    # chain, which is what a task or instance role provides on AWS.
+    s3_bucket: str | None = None
+    s3_region: str | None = None
+    s3_endpoint_url: str | None = None
+    s3_access_key_id: str | None = None
+    s3_secret_access_key: SecretStr | None = None
     max_upload_mb: int = Field(default=20, ge=1, le=200)
     max_pages: int = Field(default=500, ge=1)
     max_csv_rows: int = Field(default=50_000, ge=1)
@@ -76,6 +83,10 @@ class Settings(BaseSettings):
     parse_timeout_seconds: float = Field(default=120.0, gt=0)
     retrieval_candidates: int = Field(default=30, ge=1, le=200)
     rrf_k: int = Field(default=60, ge=1)
+    # Cross-encoder reranking of the top fused candidates. Off unless a model is named; see the
+    # E3 result in the README before turning it on.
+    reranker_model: str | None = None
+    reranker_top: int = Field(default=20, ge=2, le=100)
     # Owners with at most this many chunks are searched exactly.
     exact_search_max_chunks: int = Field(default=20_000, ge=0)
     # Spike S-2 recall@10 (3 runs): 0.64-0.69 at 100, 0.85-0.96 at 200, 1.00 at 400.
@@ -83,9 +94,10 @@ class Settings(BaseSettings):
 
     # Chat model. "fake" answers by extracting a sentence from the retrieved passages and needs
     # no key or network; "openai" calls any OpenAI-compatible /chat/completions endpoint.
-    chat_provider: Literal["fake", "openai"] = "fake"
+    chat_provider: Literal["fake", "openai", "bedrock"] = "fake"
     chat_base_url: str = "https://api.openai.com/v1"
-    chat_model: str | None = None  # required when chat_provider="openai"
+    chat_model: str | None = None  # required for openai (model name) and bedrock (model id)
+    bedrock_region: str | None = None  # bedrock uses the AWS credential chain, no key here
     chat_api_key: SecretStr | None = None  # required when chat_provider="openai"
     chat_timeout_seconds: float = Field(default=60.0, gt=0)
     chat_retries: int = Field(default=2, ge=0, le=5)
@@ -112,6 +124,30 @@ class Settings(BaseSettings):
             raise ValueError("EKA_CHUNK_OVERLAP_TOKENS must be smaller than EKA_CHUNK_TOKENS")
         return self
 
+    @field_validator(
+        "s3_bucket",
+        "s3_region",
+        "s3_endpoint_url",
+        "s3_access_key_id",
+        "s3_secret_access_key",
+        "reranker_model",
+        "bedrock_region",
+        mode="before",
+    )
+    @classmethod
+    def _empty_means_unset(cls, value: object) -> object:
+        return None if value == "" else value
+
+    @model_validator(mode="after")
+    def _s3_needs_a_bucket_and_whole_keys(self) -> Self:
+        if self.storage_backend == "s3" and not self.s3_bucket:
+            raise ValueError("EKA_S3_BUCKET is required when EKA_STORAGE_BACKEND=s3")
+        if (self.s3_access_key_id is None) != (self.s3_secret_access_key is None):
+            raise ValueError(
+                "set both EKA_S3_ACCESS_KEY_ID and EKA_S3_SECRET_ACCESS_KEY, or neither"
+            )
+        return self
+
     @model_validator(mode="after")
     def _live_chat_needs_a_model_and_a_key(self) -> Self:
         if self.chat_provider == "openai" and (
@@ -120,6 +156,8 @@ class Settings(BaseSettings):
             raise ValueError(
                 "EKA_CHAT_MODEL and EKA_CHAT_API_KEY are required for the openai provider"
             )
+        if self.chat_provider == "bedrock" and self.chat_model is None:
+            raise ValueError("EKA_CHAT_MODEL (the Bedrock model id) is required for bedrock")
         return self
 
     @property

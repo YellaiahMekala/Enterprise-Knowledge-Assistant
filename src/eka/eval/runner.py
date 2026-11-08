@@ -21,6 +21,7 @@ from eka.eval.dataset import ChallengeQuestion, Question
 from eka.eval.metrics import QuestionResult, first_relevant_rank
 from eka.ingestion.parse import parse_document
 from eka.ports.embedder import Embedder
+from eka.ports.reranker import Reranker
 from eka.services.documents import DocumentService, UploadPolicy
 from eka.services.processing import IngestionProcessor, ProcessingSettings
 from eka.services.retrieval import RetrievalService, RetrievalSettings
@@ -37,6 +38,7 @@ class EvalConfig:
     top_k: int = 10
     retrieval: RetrievalSettings = RetrievalSettings()
     any_document: bool = False
+    reranker: Reranker | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,7 +109,9 @@ async def run_questions(
 ) -> list[QuestionResult]:
     results = []
     async with database.session_for(owner, Role.USER) as session:
-        service = RetrievalService(SqlChunkSearch(session), embedder, config.retrieval)
+        service = RetrievalService(
+            SqlChunkSearch(session), embedder, config.retrieval, config.reranker
+        )
         for question in questions:
             hits = await service.search(
                 owner, question.question, top_k=config.top_k, filters=SearchFilters()
@@ -133,7 +137,9 @@ async def challenge_cosines(
     """Best-passage cosine for each unanswerable question."""
     values = []
     async with database.session_for(owner, Role.USER) as session:
-        service = RetrievalService(SqlChunkSearch(session), embedder, config.retrieval)
+        service = RetrievalService(
+            SqlChunkSearch(session), embedder, config.retrieval, config.reranker
+        )
         for question in questions:
             hits = await service.search(
                 owner, question.question, top_k=GATE_TOP_K, filters=SearchFilters()

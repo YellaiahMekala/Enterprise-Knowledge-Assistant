@@ -15,6 +15,7 @@ from pathlib import Path
 
 from eka.adapters.db.engine import Database
 from eka.adapters.embedder_fastembed import FastEmbedEmbedder
+from eka.adapters.reranker_fastembed import FastEmbedReranker
 from eka.eval.dataset import load_challenge, load_questions
 from eka.eval.gate import check, load_thresholds
 from eka.eval.metrics import QuestionResult
@@ -54,6 +55,14 @@ def _parser() -> argparse.ArgumentParser:
         "--check", action="store_true", help="exit with status 1 if the run misses a threshold"
     )
     parser.add_argument(
+        "--rerank",
+        nargs="?",
+        const="Xenova/ms-marco-MiniLM-L-6-v2",
+        default=None,
+        metavar="MODEL",
+        help="re-order the top fused candidates with a cross-encoder (experiment E3)",
+    )
+    parser.add_argument(
         "--any-document",
         action="store_true",
         help="count a passage as relevant by its text alone (for a corpus merged into one file)",
@@ -69,6 +78,7 @@ async def _run(args: argparse.Namespace) -> tuple[str, list[QuestionResult]]:
         top_k=args.top_k,
         retrieval=RetrievalSettings(mode=args.mode),
         any_document=args.any_document,
+        reranker=FastEmbedReranker(args.rerank, args.model_cache) if args.rerank else None,
     )
     questions = load_questions(args.questions)
     challenge = load_challenge(args.challenge)

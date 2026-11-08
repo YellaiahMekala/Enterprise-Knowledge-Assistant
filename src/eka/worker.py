@@ -14,7 +14,7 @@ from functools import partial
 from eka.adapters.db.engine import Database
 from eka.adapters.db.ingestion_queue import SqlIngestionQueue
 from eka.adapters.embedder_fastembed import FastEmbedEmbedder
-from eka.adapters.storage_local import LocalFileStore
+from eka.adapters.storage import build_file_store
 from eka.config import Settings
 from eka.ingestion.parse_runner import parse_in_child
 from eka.logging_config import configure_logging
@@ -37,7 +37,7 @@ async def run_worker(settings: Settings, stop: asyncio.Event) -> None:
         )
         processor = IngestionProcessor(
             SqlIngestionQueue(database),
-            LocalFileStore(settings.storage_local_dir),
+            build_file_store(settings),
             embedder,
             partial(
                 parse_in_child,
