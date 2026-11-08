@@ -1,0 +1,37 @@
+server:
+  port: ${OPS_AGENT_PORT:8090}
+
+spring:
+  application:
+    name: eka-ops-agent
+  mail:
+    host: ${EKA_ALERT_SMTP_HOST:localhost}
+    port: ${EKA_ALERT_SMTP_PORT:587}
+    username: ${EKA_ALERT_SMTP_USER:}
+    password: ${EKA_ALERT_SMTP_PASSWORD:}
+    properties:
+      mail.smtp.auth: ${EKA_ALERT_SMTP_AUTH:true}
+      mail.smtp.starttls.enable: true
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 10000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+ops:
+  webhook-token: ${OPS_AGENT_WEBHOOK_TOKEN:}
+  prometheus-url: ${OPS_AGENT_PROMETHEUS_URL:http://prometheus:9090}
+  core-url: ${OPS_AGENT_CORE_URL:http://api:8000}
+  edge-management-url: ${OPS_AGENT_EDGE_MANAGEMENT_URL:http://edge:8081}
+  runbook-file: ${OPS_AGENT_RUNBOOK_FILE:/app/runbooks.md}
+  max-tool-calls: ${OPS_AGENT_MAX_TOOL_CALLS:5}
+  mail:
+    to: ${EKA_ALERT_EMAIL_TO:}
+    from: ${EKA_ALERT_EMAIL_FROM:${EKA_ALERT_SMTP_USER:}}
+  model:
+    api-key: ${EKA_CHAT_API_KEY:}
+    name: ${EKA_CHAT_MODEL:gpt-4o-mini}
+    base-url: ${EKA_CHAT_BASE_URL:https://api.openai.com/v1}

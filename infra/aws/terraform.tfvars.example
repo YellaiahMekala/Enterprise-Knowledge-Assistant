@@ -1,0 +1,11 @@
+# Copy to terraform.tfvars (git-ignored) and fill in. None of these values is a secret.
+region             = "eu-west-1"
+vpc_id             = "vpc-xxxxxxxx"
+public_subnet_ids  = ["subnet-aaaaaaaa", "subnet-bbbbbbbb"]
+private_subnet_ids = ["subnet-cccccccc", "subnet-dddddddd"]
+allowed_cidrs      = ["203.0.113.10/32"] # your own address
+core_image         = "ACCOUNT.dkr.ecr.eu-west-1.amazonaws.com/eka-core:0.1.0"
+edge_image         = "ACCOUNT.dkr.ecr.eu-west-1.amazonaws.com/eka-edge:0.1.0"
+oidc_issuer        = "https://login.example.test/realms/eka"
+oidc_jwk_set_uri   = "https://login.example.test/realms/eka/protocol/openid-connect/certs"
+chat_model         = "anthropic.claude-3-haiku-20240307-v1:0"
