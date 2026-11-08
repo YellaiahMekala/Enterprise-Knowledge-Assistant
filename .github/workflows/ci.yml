@@ -9,7 +9,57 @@ permissions:
   contents: read
 
 jobs:
+  edge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Edge tests
+        working-directory: gateway
+        run: mvn -B verify
+      - name: Keep the tokens the edge minted for the core's interop test
+        uses: actions/upload-artifact@v5
+        with:
+          name: edge-interop
+          path: gateway/target/interop
+
+  ops-agent:
+    # Reads ../docs/runbooks.md and ../monitoring/alerts.yml in its tests, so a renamed alert or
+    # a missing runbook section fails here.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Ops agent tests
+        working-directory: ops-agent
+        run: mvn -B verify
+
+  ui:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - run: npm ci
+      - run: npx ng test --watch=false
+      - run: npx ng build
+
   lint-and-test:
+    needs: edge
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -23,6 +73,10 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
           cache-dependency-path: pyproject.toml
+      - uses: actions/download-artifact@v6
+        with:
+          name: edge-interop
+          path: gateway/target/interop
       - name: Install
         run: pip install -e ".[dev]"
       - name: Lint and format check
@@ -35,6 +89,35 @@ jobs:
         run: python -m eka.tools.export_openapi --check
       - name: Unit, component and architecture tests (no Docker needed)
         run: pytest -m "not integration"
+
+  api-contract:
+    # Postman collection against a core started in test mode (no database needed): the checks
+    # that cover authentication, authorization, error format and the metrics endpoint.
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: pip install -e .
+      - name: Install Postman CLI
+        run: curl -o- "https://dl-cli.pstmn.io/install/linux64.sh" | sh
+      - name: Start the core
+        env:
+          EKA_ENVIRONMENT: test
+          EKA_AUTH_MODE: api_key
+        run: |
+          USER_HASH=$(python -c "from eka.security.auth import digest_key; print(digest_key('ci-user-key-0001').hex())")
+          ADMIN_HASH=$(python -c "from eka.security.auth import digest_key; print(digest_key('ci-admin-key-0002').hex())")
+          export EKA_API_KEYS="{\"u\":{\"sha256\":\"$USER_HASH\",\"role\":\"user\"},\"a\":{\"sha256\":\"$ADMIN_HASH\",\"role\":\"admin\"}}"
+          nohup python -m uvicorn --factory eka.main:create_app --port 8000 > core.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf localhost:8000/health/live && break; sleep 1; done
+      - name: Run the collection
+        run: |
+          postman collection run postman/eka.postman_collection.json             -e postman/local.postman_environment.json             --env-var apiKey=ci-user-key-0001 --env-var userKey=ci-user-key-0001 --env-var adminKey=ci-admin-key-0002             -i "Health is public" -i Authentication -i Authorization
 
   integration:
     # Real PostgreSQL with pgvector through Testcontainers: migrations, row-level security,
@@ -52,6 +135,57 @@ jobs:
         run: pip install -e ".[dev]"
       - name: Full suite with coverage gate (85%)
         run: pytest --cov=eka --cov-report=term-missing --cov-fail-under=85
+
+  evaluation:
+    # Retrieval-quality gate. Ingests eval/corpus with the real embedding model into a real
+    # PostgreSQL and fails when Hit@3, MRR or the refusal gate fall below eval/thresholds.json.
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.7-pg17
+        env:
+          POSTGRES_USER: eka
+          POSTGRES_DB: eka
+          # A throwaway database that exists only for this job and listens on the runner.
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U eka -d eka"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      EKA_DATABASE_URL: postgresql+psycopg://eka@127.0.0.1:5432/eka
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install
+        run: pip install -e ".[dev]"
+      - name: Cache the embedding model
+        uses: actions/cache@v6
+        with:
+          path: data/models
+          key: embedding-model-bge-small-en-v1.5
+      - name: Apply migrations
+        run: alembic upgrade head
+      - name: Retrieval evaluation with regression gate
+        run: python -m eka.eval --check --out eval/reports/ci.md
+      - name: Show the report
+        if: always()
+        run: cat eval/reports/ci.md || true
+      - name: Keep the report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: retrieval-evaluation
+          path: eval/reports/ci.md
+          if-no-files-found: ignore
 
   docker-image:
     runs-on: ubuntu-latest
@@ -85,3 +219,31 @@ jobs:
           test "$(curl -s -o /dev/null -w '%{http_code}' -H 'X-API-Key: ci-smoke-key' http://localhost:8000/api/v1/me)" = 200
           test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/health/ready)" = 503
           docker logs eka
+
+  monitoring:
+    # Prometheus config, alert rules and the alert unit tests (monitoring/alerts.test.yml).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check config and rules, run the alert tests
+        run: |
+          promtool() { docker run --rm -v "$PWD/monitoring:/m" -w /m --entrypoint promtool prom/prometheus:v3.5.0 "$@"; }
+          promtool check config --syntax-only prometheus.yml
+          promtool check rules alerts.yml
+          promtool test rules alerts.test.yml
+
+  terraform:
+    # Offline checks only: formatting and validation. Nothing here touches an AWS account.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.0
+      - name: Terraform format, init, validate
+        working-directory: infra/aws
+        run: |
+          terraform fmt -check -recursive
+          terraform init -backend=false -input=false
+          terraform validate
+

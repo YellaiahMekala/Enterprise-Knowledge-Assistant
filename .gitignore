@@ -53,3 +53,13 @@ tracker.md
 # Test and build caches
 .hypothesis/
 .angular/
+
+# Database backups
+backups/
+
+# Terraform: state can hold secrets; the lock file is committed
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+crash.log
