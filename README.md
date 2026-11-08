@@ -19,17 +19,19 @@ Architecture: Angular web UI → Spring Boot edge (Java 21: OIDC token validatio
 
 ## Status
 
-Everything below was run locally on 2026-11-07 against the Docker Compose stack (PostgreSQL 17
-with pgvector, core, worker, edge, Prometheus, Grafana) on a development laptop. On GitHub Actions
-the core lint, type and test jobs (Python 3.11 and 3.12), the integration suite with its coverage
-gate and the image build have passed; the edge, UI, API-contract, evaluation and monitoring jobs
-were rehearsed locally and run on GitHub from the next push.
+Everything below was run locally between 2026-11-07 and 2026-11-09 against the Docker Compose stack
+(PostgreSQL 17 with pgvector, core, worker, edge, Prometheus, Alertmanager, Grafana, Keycloak, the
+triage agent) on a development laptop. All GitHub Actions jobs pass on `main`: core lint, types and
+tests (Python 3.11 and 3.12), integration with the coverage gate, image build, edge, UI, API
+contract, evaluation, monitoring, ops-agent and Terraform validate. The first run of the edge job
+failed on a timing problem in the test fixture (a hung fake core stalled later tests); the fix is in
+the history.
 
 ### Built and checked
 
 | Area | What exists | How it was checked |
 |---|---|---|
-| Core API (FastAPI) | Typed settings that refuse a half-configured start, problem+json errors with a request id, liveness and readiness probes | 489 tests pass (68 need Docker) |
+| Core API (FastAPI) | Typed settings that refuse a half-configured start, problem+json errors with a request id, liveness and readiness probes | 522 tests pass, 8 skipped, 91.7% coverage (gate 85%) |
 | Authentication | API-key mode (SHA-256 digests, constant-time compare) and gateway mode (ES256 internal token from the edge, key set fetched from the edge) | Unit tests; a token minted by the real edge verifies in the core; behind the edge the core answers 401 to an identity-provider token, an API key and no credential |
 | Isolation | Owner-scoped repositories plus row-level security that fails closed; leakage tests through search | Integration tests; two users through the edge see only their own documents |
 | Ingestion | Upload (PDF, DOCX, CSV, code, text) validated by content, background worker, local BGE-small embeddings | 13 mixed files ingested through the Docker stack |
@@ -104,6 +106,7 @@ Triage agent with `gpt-4o-mini`, one synthetic `EkaHighErrorRate` alert, mail to
 |---|---|
 | Query-prefix experiment (E5) | Not run |
 | Reranking on by default | Needs a larger evaluation set than 13 chunks (see ADR-032) |
+| Two live-answer defects | q31 is wrongly refused and q29 cites the wrong file; causes not yet investigated |
 | Full hand scoring of live answers | Only the misses were read (see above) |
 | Other models | Only `gpt-4o-mini` was run |
 | Entra ID or other hosted identity provider | Tested against Keycloak only |
@@ -231,7 +234,7 @@ Settings come from environment variables or a git-ignored `.env` file (copy `.en
 | GET, DELETE | `/api/v1/conversations`, `/api/v1/conversations/{id}` | key | Conversation history |
 | GET | `/api/v1/admin/status`, `/api/v1/admin/metrics` | admin key | Build info; Prometheus metrics |
 
-The full contract is in `docs/openapi.json`. Behind the edge, the key is replaced by a bearer token.
+The full contract is in `docs/openapi.json`. `postman/eka-crud.postman_collection.json` is a hands-on collection (documents and conversations create, read, list, delete; search; chat; admin; error cases) with its own environment file; run it from the repository root against a running stack. Behind the edge, the key is replaced by a bearer token.
 
 Errors use `application/problem+json` with a `request_id` that matches the `X-Request-Id` response header and the log line.
 
