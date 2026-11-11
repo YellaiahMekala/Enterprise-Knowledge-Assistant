@@ -1,11 +1,27 @@
 # Every alert goes to the triage agent, which investigates and emails the report.
 # The agent's bearer token is read from a file that is not in git (monitoring/secrets/webhook_token).
+#
+# Second path: if Alertmanager cannot deliver to the agent (agent down, crashing, rejecting the
+# token), Prometheus raises EkaAlertDeliveryFailing from Alertmanager's own counter of failed
+# delivery attempts, and
+# that one alert is emailed directly, without the agent. Locally the mail goes to mailpit
+# (profile "agent"); for real SMTP, change smtp_* and "to" in a copy that is not committed.
+global:
+  smtp_smarthost: mailpit:1025
+  smtp_from: eka-alertmanager@localhost
+  smtp_require_tls: false
+
 route:
   receiver: ops-agent
   group_by: [alertname]
   group_wait: 20s
   group_interval: 5m
   repeat_interval: 4h
+  routes:
+    - receiver: direct-email
+      matchers: [alertname="EkaAlertDeliveryFailing"]
+      group_wait: 10s
+      repeat_interval: 1h
 
 receivers:
   - name: ops-agent
@@ -16,3 +32,10 @@ receivers:
           authorization:
             type: Bearer
             credentials_file: /etc/alertmanager/secrets/webhook_token
+
+  - name: direct-email
+    email_configs:
+      - to: eka-oncall@localhost
+        send_resolved: true
+        headers:
+          Subject: "[EKA] {{ .Status | toUpper }}: alerts are not reaching the triage agent"

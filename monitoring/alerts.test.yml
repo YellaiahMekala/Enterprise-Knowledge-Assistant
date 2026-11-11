@@ -73,3 +73,25 @@ tests:
             exp_annotations:
               summary: "The edge has stopped sending traffic to the core"
               runbook: "docs/runbooks.md#ekaedgecircuitopen"
+
+  - name: failed webhook deliveries raise the watchdog, a healthy agent does not
+    interval: 1m
+    input_series:
+      - series: 'alertmanager_notification_requests_failed_total{integration="webhook",receiver="ops-agent"}'
+        values: '0 0 0 1 2 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3'
+      - series: 'alertmanager_notification_requests_failed_total{integration="email",receiver="direct-email"}'
+        values: '0+1x10'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: EkaAlertDeliveryFailing
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: EkaAlertDeliveryFailing
+        exp_alerts:
+          - exp_labels: {severity: page, integration: webhook, receiver: ops-agent}
+            exp_annotations:
+              summary: "Alertmanager cannot deliver alerts to the triage agent; open http://localhost:9093 for the active alerts"
+              runbook: "docs/runbooks.md#ekaalertdeliveryfailing"
+      - eval_time: 20m
+        alertname: EkaAlertDeliveryFailing
+        exp_alerts: []

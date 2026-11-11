@@ -60,6 +60,15 @@ Every error response carries a `request_id`. Search the logs for it to follow on
 
 Tuning variables: `EKA_EDGE_CB_WINDOW`, `EKA_EDGE_CB_MIN_CALLS`, `EKA_EDGE_CB_OPEN_FOR`.
 
+## EkaAlertDeliveryFailing
+
+**Meaning:** Alertmanager tried to send alerts to the triage agent (`ops-agent`) and failed in the last 10 minutes. This alert does not go through the agent; it is emailed directly. Other alerts may be firing that nobody has been told about.
+
+1. Open Alertmanager (http://localhost:9093) and read the active alerts. Follow their runbooks; there is no agent report for them.
+2. Check the agent: `docker compose --profile agent ps ops-agent` and its last logs. Restart it if it exited.
+3. Agent up but deliveries still fail: Alertmanager's log shows the HTTP status. 401 means the token in `monitoring/secrets/webhook_token` differs from `OPS_AGENT_WEBHOOK_TOKEN`.
+4. The alert resolves on its own 10 minutes after the last failed delivery.
+
 ## Backup and restore
 
 ```bash

@@ -30,7 +30,7 @@ A separate Java 21 Spring Boot service, `ops-agent`, built on LangChain4j. Alert
 | Tools that can act (restart, roll back) | Out of scope: a wrong action from a model costs more than a slow human. Review trigger above. |
 
 ## Consequences
-- Alert delivery now depends on the agent being up. Alertmanager retries the webhook, and Prometheus still shows the alert, but there is no second path to email. A direct Alertmanager email route is the next step if that matters.
+- Alert delivery depends on the agent being up. Second path (added 2026-11-11): Prometheus scrapes Alertmanager, `EkaAlertDeliveryFailing` fires on any failed webhook attempt in 10 minutes, and Alertmanager emails that one alert directly, never through the agent. Drill: with the agent stopped, the email reached the local mail catcher 70 s after Prometheus started. Not covered: an agent that accepts the alert and then fails to send its own email.
 - The cause the model states can be wrong. The email says so, lists the evidence it used and marks runbook-only reports as such.
 - There is no log search tool because the project has no log store. Adding one (for example Loki) would be a new decision.
 - Cost: a few thousand tokens per alert group with a small model. Not yet measured with a live model.

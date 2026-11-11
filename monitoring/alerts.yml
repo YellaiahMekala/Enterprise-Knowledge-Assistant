@@ -50,3 +50,12 @@ groups:
         annotations:
           summary: "The edge has stopped sending traffic to the core"
           runbook: "docs/runbooks.md#ekaedgecircuitopen"
+
+      # Watchdog for the triage agent. Routed straight to email (alertmanager.yml), never to the
+      # agent, so it still arrives when the agent is down.
+      - alert: EkaAlertDeliveryFailing
+        expr: increase(alertmanager_notification_requests_failed_total{integration="webhook"}[10m]) > 0
+        labels: {severity: page}
+        annotations:
+          summary: "Alertmanager cannot deliver alerts to the triage agent; open http://localhost:9093 for the active alerts"
+          runbook: "docs/runbooks.md#ekaalertdeliveryfailing"

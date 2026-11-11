@@ -24,3 +24,8 @@ scrape_configs:
     metrics_path: /actuator/prometheus
     static_configs:
       - targets: ['edge:8081']
+
+  # Alertmanager's own metrics: the watchdog alert reads its webhook failure counter.
+  - job_name: alertmanager
+    static_configs:
+      - targets: ['alertmanager:9093']
