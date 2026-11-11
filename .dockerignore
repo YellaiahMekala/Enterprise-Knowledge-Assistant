@@ -11,3 +11,15 @@
 htmlcov
 .env
 tests
+node_modules
+**/node_modules
+ui
+gateway
+data
+backups
+.hypothesis
+docs
+monitoring
+postman
+eval
+*.log
