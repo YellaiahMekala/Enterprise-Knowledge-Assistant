@@ -38,6 +38,7 @@ eval/reports/
 frontend/node_modules/
 frontend/dist/
 gateway/target/
+ops-agent/target/
 
 monitoring/secrets/
 ui/dist/

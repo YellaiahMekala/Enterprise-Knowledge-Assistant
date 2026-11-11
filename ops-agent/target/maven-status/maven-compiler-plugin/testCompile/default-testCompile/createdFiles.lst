@@ -1,7 +1,0 @@
-com\eka\ops\tools\OpsToolsTest.class
-com\eka\ops\web\AlertWebhookControllerTest.class
-com\eka\ops\tools\RunbookReaderTest.class
-com\eka\ops\tools\PromQlGuardTest.class
-com\eka\ops\triage\ScriptedModel.class
-com\eka\ops\triage\TriageServiceTest.class
-com\eka\ops\mail\ReportFormatterTest.class
