@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from eka.eval.metrics import QuestionResult, hit_rate, mean_reciprocal_rank
 
 KS = (1, 3, 5)
-THRESHOLDS = (0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75)
+THRESHOLDS = (0.40, 0.45, 0.50, 0.52, 0.55, 0.60, 0.65, 0.70, 0.75)
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,6 +19,7 @@ class RunInfo:
     documents: int
     chunks: int
     date: str
+    query_prefix: str = ""
 
 
 def _percent(value: float) -> str:
@@ -44,7 +45,8 @@ def render_report(
         "",
         f"Run date {info.date}. Embedding model `{info.model}`, chunks of {info.chunk_tokens} "
         f"tokens with {info.chunk_overlap_tokens} overlap, top {info.top_k} passages per question. "
-        f"Corpus: {info.documents} documents, {info.chunks} chunks.",
+        f"Corpus: {info.documents} documents, {info.chunks} chunks."
+        + (f' Query prefix: "{info.query_prefix}".' if info.query_prefix else ""),
         "",
         "A passage is relevant when it comes from the expected document and contains the "
         "expected text.",

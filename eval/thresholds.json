@@ -2,5 +2,5 @@
   "min_hit_at_3": 0.95,
   "min_mrr": 0.9,
   "max_wrong_refusals": 0.05,
-  "gate_cosine": 0.55
+  "gate_cosine": 0.50
 }

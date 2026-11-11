@@ -15,7 +15,16 @@ _BATCH = 32
 
 
 class FastEmbedEmbedder:
-    def __init__(self, model_name: str, cache_dir: Path, expected_dimension: int) -> None:
+    def __init__(
+        self,
+        model_name: str,
+        cache_dir: Path,
+        expected_dimension: int,
+        *,
+        query_prefix: str = "",
+    ) -> None:
+        # Text put before every query, never before a document (experiment E5). Empty by default.
+        self.query_prefix = query_prefix
         model: Any = TextEmbedding(model_name=model_name, cache_dir=str(cache_dir))
         self._model = model
         self.model_name = model_name
@@ -34,4 +43,4 @@ class FastEmbedEmbedder:
         return [vector.tolist() for vector in self._model.embed(list(texts), batch_size=_BATCH)]
 
     def embed_query(self, text: str) -> list[float]:
-        return [float(x) for x in next(iter(self._model.query_embed(text)))]
+        return [float(x) for x in next(iter(self._model.query_embed(self.query_prefix + text)))]

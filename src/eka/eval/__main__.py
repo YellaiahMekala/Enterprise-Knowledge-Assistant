@@ -63,6 +63,11 @@ def _parser() -> argparse.ArgumentParser:
         help="re-order the top fused candidates with a cross-encoder (experiment E3)",
     )
     parser.add_argument(
+        "--query-prefix",
+        default="",
+        help="text put before every question, not before documents (experiment E5)",
+    )
+    parser.add_argument(
         "--any-document",
         action="store_true",
         help="count a passage as relevant by its text alone (for a corpus merged into one file)",
@@ -71,7 +76,7 @@ def _parser() -> argparse.ArgumentParser:
 
 
 async def _run(args: argparse.Namespace) -> tuple[str, list[QuestionResult]]:
-    embedder = FastEmbedEmbedder(args.model, args.model_cache, 384)
+    embedder = FastEmbedEmbedder(args.model, args.model_cache, 384, query_prefix=args.query_prefix)
     config = EvalConfig(
         chunk_tokens=args.chunk_tokens,
         chunk_overlap_tokens=args.overlap,
@@ -95,6 +100,7 @@ async def _run(args: argparse.Namespace) -> tuple[str, list[QuestionResult]]:
         await database.dispose()
     info = RunInfo(
         model=args.model,
+        query_prefix=args.query_prefix,
         chunk_tokens=args.chunk_tokens,
         chunk_overlap_tokens=args.overlap,
         top_k=args.top_k,

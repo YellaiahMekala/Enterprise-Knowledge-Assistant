@@ -18,7 +18,7 @@ A client that disconnects cancels the generator; nothing is stored for a cancell
 import logging
 import re
 import time
-from collections.abc import AsyncGenerator, AsyncIterator, Callable
+from collections.abc import AsyncGenerator, AsyncIterator, Callable, Sequence
 from contextlib import AbstractAsyncContextManager, aclosing
 from dataclasses import dataclass
 from typing import Any
@@ -48,6 +48,7 @@ from eka.domain.models import (
 from eka.ports.chat import ChatModel
 from eka.ports.embedder import Embedder
 from eka.ports.repositories import ConversationRepository
+from eka.services.grounding import misattributed
 from eka.services.prompt import build_answer_messages, build_rewrite_messages, select_passages
 from eka.services.retrieval import EmbedderProvider, RetrievalService
 
@@ -58,8 +59,9 @@ _QUOTE_CHARS = 300
 _TITLE_CHARS = 60
 _RELEASE_PIECE_CHARS = 80
 _RETRY_NOTE = (
-    "Your previous reply cited a passage that does not exist or cited none. Answer again, citing "
-    "only the passage numbers given, or reply exactly " + INSUFFICIENT_EVIDENCE + "."
+    "Your previous reply cited a passage that does not exist, cited a passage that does not "
+    "contain the statement, or cited none. Answer again, citing for each statement the passage "
+    "that contains it, or reply exactly " + INSUFFICIENT_EVIDENCE + "."
 )
 
 
@@ -70,7 +72,7 @@ Outcome = tuple[str, tuple[Citation, ...], bool, str | None, bool]
 @dataclass(frozen=True, slots=True)
 class AnswerSettings:
     default_mode: AnswerMode = "verified"
-    min_cosine: float = 0.55
+    min_cosine: float = 0.50
     context_passages: int = 5
     max_context_chars: int = 12_000
     history_messages: int = 6
@@ -101,11 +103,13 @@ class Verdict:
     ok: bool
     cited: tuple[int, ...]
     declined: bool
+    misattributed: tuple[int, ...] = ()
 
 
-def verify(text: str, passage_count: int) -> Verdict:
-    """Check a reply. It is valid when it cites at least one passage and only passages that were
-    sent, or when it is exactly the "insufficient evidence" sentinel."""
+def verify(text: str, passage_count: int, passages: Sequence[str] = ()) -> Verdict:
+    """Check a reply. It is valid when it cites at least one passage, only passages that were
+    sent, and (when ``passages`` is given) no citation that another passage clearly supports
+    better (``grounding.misattributed``). The "insufficient evidence" sentinel is a decline."""
     stripped = text.strip()
     if stripped.rstrip(".") == INSUFFICIENT_EVIDENCE:
         return Verdict(ok=False, cited=(), declined=True)
@@ -115,7 +119,8 @@ def verify(text: str, passage_count: int) -> Verdict:
         if number not in cited:
             cited.append(number)
     ok = bool(cited) and all(1 <= n <= passage_count for n in cited)
-    return Verdict(ok=ok, cited=tuple(cited), declined=False)
+    wrong = misattributed(stripped, passages) if ok and passages else ()
+    return Verdict(ok=ok and not wrong, cited=tuple(cited), declined=False, misattributed=wrong)
 
 
 def _citation(index: int, hit: SearchHit) -> Citation:
@@ -347,12 +352,12 @@ class AnswerService:
                 if mode == "fast":
                     yield AnswerEvent("token", {"text": fragment, "provisional": True}), None
         text = "".join(parts).strip()
-        verdict = verify(text, len(passages))
+        verdict = verify(text, len(passages), [p.text for p in passages])
 
         if not verdict.ok and not verdict.declined and mode == "verified":
             retry = [*messages, ChatMessage("assistant", text), ChatMessage("user", _RETRY_NOTE)]
             text = (await self._model.complete(retry, max_tokens=max_tokens)).strip()
-            verdict = verify(text, len(passages))
+            verdict = verify(text, len(passages), [p.text for p in passages])
 
         if verdict.ok:
             citations = tuple(_citation(n, passages[n - 1]) for n in verdict.cited)
@@ -363,6 +368,8 @@ class AnswerService:
             yield None, (text, citations, False, None, True)
             return
 
+        if verdict.misattributed:
+            logger.info("answer cited passages that do not support it: %s", verdict.misattributed)
         reason = REASON_MODEL_DECLINED if verdict.declined else REASON_UNVERIFIED
         replacement = REFUSAL_TEXT if verdict.declined else UNVERIFIED_TEXT
         if mode == "fast":

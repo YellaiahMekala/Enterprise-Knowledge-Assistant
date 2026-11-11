@@ -11,7 +11,7 @@ Chat with your documents through a REST API. Each answer cites the document, pag
 > This is a generic, fictitious application built to demonstrate software engineering skills. It does not
 > contain, reflect or derive from any client's or employer's data, code, functionality, architecture, designs
 > or confidential information, and it is not affiliated with or endorsed by any current or former employer or
-> client. All data is synthetic, and any resemblance to real people, organisations or documents is
+> client. All data is synthetic, and any resemblance to real people, organizations or documents is
 > coincidental. Credentials in this repository are development-only. It is provided "as is", without warranty,
 > and is not intended for production use without independent security review and hardening.
 
@@ -31,14 +31,14 @@ the history.
 
 | Area | What exists | How it was checked |
 |---|---|---|
-| Core API (FastAPI) | Typed settings that refuse a half-configured start, problem+json errors with a request id, liveness and readiness probes | 522 tests pass, 8 skipped, 91.7% coverage (gate 85%) |
+| Core API (FastAPI) | Typed settings that refuse a half-configured start, problem+json errors with a request id, liveness and readiness probes | 545 tests collected; locally 537 pass, 5 skipped, 3 edge-interop tests need a fresh edge build (coverage last measured at 522 tests: 91.7%, gate 85%) |
 | Authentication | API-key mode (SHA-256 digests, constant-time compare) and gateway mode (ES256 internal token from the edge, key set fetched from the edge) | Unit tests; a token minted by the real edge verifies in the core; behind the edge the core answers 401 to an identity-provider token, an API key and no credential |
 | Isolation | Owner-scoped repositories plus row-level security that fails closed; leakage tests through search | Integration tests; two users through the edge see only their own documents |
 | Ingestion | Upload (PDF, DOCX, CSV, code, text) validated by content, background worker, local BGE-small embeddings | 13 mixed files ingested through the Docker stack |
 | Retrieval | Dense (pgvector HNSW) and full-text candidates fused by reciprocal rank; metadata filters; refusal gate on cosine similarity | Tests; evaluation below |
 | Chat | Cited answers over JSON or server-sent events; verified mode (default) and fast mode; conversation memory; OpenAI-compatible adapter | Run with the fake model only: a cited answer, a `weak_evidence` refusal, both stream modes. No live model was used |
 | Edge (Spring Cloud Gateway, Java 21) | OIDC token validation, credential swap to a 60-second internal token, per-user rate limit, audit log, SSE passthrough with client-disconnect cancel, problem+json for upstream failures, circuit breaker on the core route (fast 503 `circuit-open` while open), Prometheus on a private port | 43 tests (hung-core drill, breaker opens after repeated timeouts and its state is exported, streaming spike); through the real image: bad tokens 401, role mapping, tokens spaced about 100 ms apart, 12 of 45 rapid requests limited |
-| Observability | Admin-only `/api/v1/admin/metrics`, request counts and latency by route template; Prometheus and Grafana as an opt-in Compose profile; SLO recording rules and 4 alerts as code, each linked to a runbook | Prometheus scraped core and edge; the dashboard loaded in Grafana; `promtool test rules` passes 4 alert test cases |
+| Observability | Admin-only `/api/v1/admin/metrics`, request counts and latency by route template; Prometheus and Grafana as an opt-in Compose profile; SLO recording rules and 4 alerts as code plus a watchdog, each linked to a runbook; the watchdog (`EkaAlertDeliveryFailing`) is emailed directly when Alertmanager cannot reach the triage agent | Prometheus scraped core and edge; the dashboard loaded in Grafana; `promtool test rules` passes 5 alert test cases; watchdog drill with the agent stopped: email in the local catcher after 70 s |
 | Operations | [Runbooks](docs/runbooks.md) per alert, SLOs with error budget, database backup and restore scripts, restore drill | Restore drill passed: migration version, row counts and row-level security identical after restore (8 s, local data) |
 | Web UI (Angular) | Sign-in by API key, document status, streamed chat with citations, conversation list | 11 unit tests; a scripted browser run (sign-in failure and success, documents, verified and fast chat, refusal, sign-out) passed 10 times in a row |
 | Identity provider | Keycloak realm in Compose (`--profile idp`) with two test users and an `eka-admin` role | 7 end-to-end checks through the real edge (`scripts/keycloak_e2e.sh`): no or bad token 401, user 200, admin route 403 for a user and 200 for the admin, role claim mapped |
@@ -96,23 +96,41 @@ The same 44 questions through `POST /api/v1/chat` with `gpt-4o-mini` (verified m
 | Wrong citation | 1 (q29 gave the right answer but cited `RetryPolicy.java`, not `incident_response.md`) |
 | Latency, whole request | median 3.3 s, slowest-but-one 3.9 s |
 
+Both defects were then traced and fixed (2026-11-11), and checked again with the offline extractive model, not with `gpt-4o-mini`:
+
+- **q31 (wrong refusal).** The best passage scored cosine 0.526, under the 0.55 gate, so the model was never asked. The sweep (below) shows 0.50 refuses no answerable question on either evaluation set, so the default is now 0.50. Cost: on the main set the gate now stops 2 of 10 unanswerable questions instead of 3; the model's own refusal has to catch the third. That has not been checked with a live model.
+- **q29 (wrong citation).** Retrieval was right (`incident_response.md` was passage 1); the model cited passage 2. The check only tested that citation numbers exist. A word-overlap check now rejects a citation when the cited passage covers less than half of the sentence's content words and another passage covers at least half and twice as many. In verified mode the model is asked once more, otherwise the answer is withheld as unverified ([`grounding.py`](src/eka/services/grounding.py)).
+- End-to-end rerun through the API (`python -m eka.tools.answer_run`, fake extractive model, real embeddings and database): q31 answered, q29 cites `incident_response.md`, and the new check rejected none of the 44 answers. This shows the check does not reject plain extractive answers; it does not show how often it catches or wrongly rejects a real model's paraphrases.
+
 I read the 8 string-match misses, the refusal and the wrong citation. I did not read the other 36 answers, so the 43 of 44 figure is not a full hand score. Token counts are not returned by the API and were not recorded. One run, one model, questions written by the author: a sanity check, not a benchmark.
 
 Triage agent with `gpt-4o-mini`, one synthetic `EkaHighErrorRate` alert, mail to the local catcher: the agent made 3 read-only calls (runbook, service health, one PromQL query) and sent a report in about 11 s. The core and edge were not running in that test, so the tools correctly reported them unreachable; the report's guess of "database issues" was the model's own and wrong (the database was up), which is why the report says to check the evidence before acting. One run; real email delivery was not tested.
+
+### Query prefix (experiment E5)
+
+BGE recommends putting `Represent this sentence for searching relevant passages: ` before each query. Same questions and corpus, `python -m eka.eval --query-prefix ...` (reports are written to `eval/reports/`, which is not committed):
+
+| Set | Prefix | Hit@1 | MRR | Answerable cosine min / median | Unanswerable median | Wrong refusals at 0.50 / 0.55 |
+|---|---|---|---|---|---|---|
+| Main (13 docs, 44 q) | none | 95.5% | 0.977 | 0.526 / 0.710 | 0.571 | 0.0% / 2.3% |
+| Main | BGE prefix | 95.5% | 0.977 | 0.484 / 0.691 | 0.549 | 2.3% / 4.5% |
+| Handbook (1 doc, 41 q) | none | 97.6% | 0.984 | 0.545 / 0.656 | 0.577 | 0.0% / 2.4% |
+| Handbook | BGE prefix | 100.0% | 1.000 | 0.519 / 0.635 | 0.549 | 0.0% / 14.6% |
+
+The prefix changes ranking by one question on one set and lowers every cosine, so the refusal gate would need recalibrating. It stays off (`EKA_EMBEDDING_QUERY_PREFIX`, empty by default). Small sets written by the author; not a benchmark.
 
 ### Not done
 
 | Item | Note |
 |---|---|
-| Query-prefix experiment (E5) | Not run |
 | Reranking on by default | Needs a larger evaluation set than 13 chunks (see ADR-032) |
-| Two live-answer defects | q31 is wrongly refused and q29 cites the wrong file; causes not yet investigated |
+| Live rerun after the q31/q29 fixes | Fixes checked with the offline model only; a `gpt-4o-mini` rerun (cents) needs approval |
 | Full hand scoring of live answers | Only the misses were read (see above) |
 | Other models | Only `gpt-4o-mini` was run |
 | Entra ID or other hosted identity provider | Tested against Keycloak only |
 | UI sign-in through the identity provider | The UI still signs in with an API key |
 | Real email delivery | Verified only into a local mail catcher; real SMTP not tried |
-| Alert delivery redundancy | If the agent is down there is no second path to email |
+| Agent failing after it accepted an alert | The watchdog covers failed deliveries to the agent, not an agent that accepts the alert and then fails to send its email |
 | Log search for the agent | There is no log store |
 | Allowlisted web fallback (ADR-030) | Not built; off by design |
 | Real Bedrock call, real AWS deployment | Needs an AWS account; the code is written and unit-tested or validated only |

@@ -109,6 +109,13 @@ def test_verify(text: str, count: int, ok: bool, cited: tuple[int, ...], decline
     assert (verdict.ok, verdict.cited, verdict.declined) == (ok, cited, declined)
 
 
+def test_verify_with_passages_rejects_a_misattributed_citation() -> None:
+    passages = ["Leave: staff carry over five unused days.", "The canteen opens at noon."]
+    assert verify("Staff carry over five unused days [1].", 2, passages).ok
+    verdict = verify("Staff carry over five unused days [2].", 2, passages)
+    assert not verdict.ok and verdict.misattributed == (2,) and not verdict.declined
+
+
 # --- grounded answers --------------------------------------------------------------------------
 
 
@@ -205,6 +212,26 @@ async def test_verified_mode_releases_text_only_after_the_whole_reply_exists() -
     events = await world.ask(mode="verified")
     assert names(events) == ["meta", "token", "done"]
     assert events[1].data == {"text": GOOD, "provisional": False}
+
+
+@pytest.mark.anyio
+async def test_verified_mode_retries_a_reply_that_cites_the_wrong_passage() -> None:
+    # The live-run defect q29: right fact, citation pointing at an unrelated passage.
+    wrong = "Staff may carry over five unused leave days [2]."
+    world = World(ScriptedChatModel([wrong], [GOOD]))
+    events = await world.ask(mode="verified")
+    done = events[-1].data
+    assert done["answer"] == GOOD and done["citations"][0]["filename"] == "leave.md"
+    assert "[2]" not in streamed_text(events)
+    assert "does not contain the statement" in world.model.complete_calls[0][-1].content
+
+
+@pytest.mark.anyio
+async def test_a_wrong_citation_that_survives_the_retry_is_not_released() -> None:
+    wrong = "Staff may carry over five unused leave days [2]."
+    world = World(ScriptedChatModel([wrong], [wrong]))
+    done = (await world.ask(mode="verified"))[-1].data
+    assert done["refused"] and done["refusal_reason"] == REASON_UNVERIFIED
 
 
 # --- fast mode ---------------------------------------------------------------------------------

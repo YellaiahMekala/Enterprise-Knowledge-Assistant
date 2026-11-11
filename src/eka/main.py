@@ -199,6 +199,7 @@ def _embedder_provider(settings: Settings, given: Embedder | None) -> EmbedderPr
                             settings.embedding_model,
                             settings.embedding_cache_dir,
                             settings.embedding_dim,
+                            query_prefix=settings.embedding_query_prefix,
                         )
                     )
         return loaded[0]

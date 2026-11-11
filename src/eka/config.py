@@ -74,6 +74,9 @@ class Settings(BaseSettings):
     embedding_model: str = "BAAI/bge-small-en-v1.5"
     embedding_dim: int = 384  # must equal the chunks.embedding column (migration 0001)
     embedding_cache_dir: Path = Path("./data/models")
+    # Text put before each search query, not before documents. Empty: experiment E5 found no
+    # gain from the BGE instruction prefix on the evaluation set (eval/reports/e5_*.md).
+    embedding_query_prefix: str = Field(default="", max_length=200)
     # Starting values, replaced by the results of experiment E1 (TDD 4.11). 510 = 512 - 2.
     chunk_tokens: int = Field(default=256, ge=16, le=510)
     chunk_overlap_tokens: int = Field(default=32, ge=0)
@@ -102,9 +105,10 @@ class Settings(BaseSettings):
     chat_timeout_seconds: float = Field(default=60.0, gt=0)
     chat_retries: int = Field(default=2, ge=0, le=5)
     answer_mode: Literal["verified", "fast"] = "verified"
-    # 0.55 refused 2.3% of answerable and 30% of unanswerable questions on the baseline
-    # evaluation (eval report, threshold sweep); 0.60 gives 4.5% and 70%.
-    refusal_min_cosine: float = Field(default=0.55, ge=0.0, le=1.0)
+    # 0.50: no answerable question refused on either evaluation set, 20% (main) and 30%
+    # (handbook) of unanswerable ones refused before the model is called. 0.55 wrongly refused
+    # q31 (best cosine 0.526) in the live run. Sweep: eval/reports/e5_none.md.
+    refusal_min_cosine: float = Field(default=0.50, ge=0.0, le=1.0)
     context_passages: int = Field(default=5, ge=1, le=20)
     max_context_chars: int = Field(default=12_000, ge=500)
     history_messages: int = Field(default=6, ge=0, le=50)
