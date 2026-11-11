@@ -68,3 +68,12 @@ class ModelUnavailable(EkaError):
 
 class ModelTimeout(EkaError):
     """The chat model did not answer within the configured time."""
+
+
+class WebFetchRefused(Exception):
+    """The web fallback did not fetch a page (ADR-030). ``reason`` is a fixed code such as
+    ``host_not_allowed``, ``private_address``, ``too_large`` or ``timeout``, safe to log."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason

@@ -51,6 +51,7 @@ from eka.ports.repositories import ConversationRepository
 from eka.services.grounding import misattributed
 from eka.services.prompt import build_answer_messages, build_rewrite_messages, select_passages
 from eka.services.retrieval import EmbedderProvider, RetrievalService
+from eka.services.web_fallback import WebFallback
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +132,8 @@ def _citation(index: int, hit: SearchHit) -> Citation:
         filename=hit.filename,
         locator=hit.locator,
         quote=hit.text[:_QUOTE_CHARS],
+        source_url=hit.source_url,
+        fetched_at=hit.fetched_at,
     )
 
 
@@ -142,6 +145,9 @@ def citation_payload(citation: Citation) -> dict[str, Any]:
         "filename": citation.filename,
         "locator": dict(citation.locator),
         "quote": citation.quote,
+        "kind": citation.kind,
+        "source_url": citation.source_url,
+        "fetched_at": citation.fetched_at.isoformat() if citation.fetched_at else None,
     }
 
 
@@ -159,8 +165,10 @@ class AnswerService:
         settings: AnswerSettings,
         *,
         clock: Callable[[], float] = time.monotonic,
+        web: WebFallback | None = None,
     ) -> None:
         self._scope = scope
+        self._web = web
         self._model = model
         self._embedder = embedder
         self._settings = settings
@@ -262,6 +270,20 @@ class AnswerService:
             )
         best = max((h.cosine for h in hits), default=None)
 
+        web_used = False
+        if self._web is not None and (best is None or best < self._settings.min_cosine):
+            web_ids = await self._web.refresh(owner_id, role)
+            if web_ids:
+                async with self._scope(owner_id, role) as scope:
+                    hits = await scope.retrieval(embedder).search(
+                        owner_id,
+                        standalone,
+                        top_k=top_k,
+                        filters=SearchFilters(document_ids=web_ids),
+                    )
+                best = max((h.cosine for h in hits), default=None)
+                web_used = True
+
         generated = False
         result: Outcome | None
         if not hits:
@@ -321,6 +343,7 @@ class AnswerService:
                 "refusal_reason": reason,
                 "mode": mode,
                 "verified": verified,
+                "web_fallback": web_used,
             },
         )
 

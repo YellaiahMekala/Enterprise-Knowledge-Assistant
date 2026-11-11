@@ -69,10 +69,14 @@ def test_a_json_answer_has_the_documented_shape(world: World) -> None:
         "refusal_reason",
         "mode",
         "verified",
+        "web_fallback",
     }
     assert body["answer"] == GOOD and body["mode"] == "verified" and body["verified"] is True
+    assert body["web_fallback"] is False
     assert body["citations"][0]["filename"] == "leave.md"
     assert body["citations"][0]["locator"] == {"type": "page", "page": 1}
+    assert body["citations"][0]["kind"] == "document"
+    assert body["citations"][0]["source_url"] is None
 
 
 def test_conversations_can_be_continued_listed_read_and_deleted(world: World) -> None:

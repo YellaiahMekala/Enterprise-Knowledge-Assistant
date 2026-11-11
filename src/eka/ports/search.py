@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from typing import Protocol
 from uuid import UUID
 
-from eka.domain.models import Candidate, SearchFilters
+from eka.domain.models import Candidate, DocumentInfo, SearchFilters
 
 
 class ChunkSearch(Protocol):
@@ -48,6 +48,6 @@ class ChunkSearch(Protocol):
 
     async def document_info(
         self, owner_id: str, document_ids: Sequence[UUID]
-    ) -> dict[UUID, tuple[str, str]]:
-        """Map of document id to (filename, content type)."""
+    ) -> dict[UUID, DocumentInfo]:
+        """Map of document id to its name, type and, for a web page, its source."""
         ...

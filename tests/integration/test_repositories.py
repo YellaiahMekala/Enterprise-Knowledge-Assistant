@@ -1,11 +1,16 @@
 """Document repository against a real database, through the same row-level-security session the
 API uses."""
 
+from dataclasses import replace
+from datetime import UTC, datetime
+
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 from eka.adapters.db.engine import Database
 from eka.adapters.db.repositories import SqlDocumentRepository
-from eka.domain.models import DocumentStatus, Role
+from eka.adapters.db.search import SqlChunkSearch
+from eka.domain.models import Document, DocumentStatus, NewDocument, Role
 from tests.integration.helpers import (
     admin_engine,
     count,
@@ -194,3 +199,68 @@ def test_an_invalid_owner_id_is_refused_before_touching_the_database(migrated_ur
             await database.dispose()
 
     run_async(scenario)
+
+
+def test_web_copies_keep_their_source_and_are_listed_newest_first_per_owner(
+    migrated_url: str,
+) -> None:
+    owner, other = unique_owner(), unique_owner()
+    url = "https://docs.python.org/3/tutorial/classes.html"
+    older, newer = datetime(2026, 11, 9, tzinfo=UTC), datetime(2026, 11, 11, tzinfo=UTC)
+
+    def web(fetched_at: datetime) -> NewDocument:
+        return replace(new_document("docs.python.org.md"), source_url=url, fetched_at=fetched_at)
+
+    async def scenario() -> tuple[list[Document], list[Document], Document | None]:
+        database = Database(migrated_url)
+        try:
+            async with database.session_for(owner, Role.USER) as session:
+                repo = SqlDocumentRepository(session)
+                await repo.add(owner, web(older))
+                added, _ = await repo.add(owner, web(newer))
+                await repo.add(owner, new_document("plain.pdf"))
+            async with database.session_for(other, Role.USER) as session:
+                await SqlDocumentRepository(session).add(other, web(newer))
+            async with database.session_for(owner, Role.USER) as session:
+                repo = SqlDocumentRepository(session)
+                info = await SqlChunkSearch(session).document_info(owner, [added.id])
+                assert info[added.id].source_url == url
+                return (
+                    await repo.web_copies(owner, url),
+                    await repo.web_copies(owner, "https://docs.python.org/other"),
+                    await repo.get(owner, added.id),
+                )
+        finally:
+            await database.dispose()
+
+    copies, none, fetched = run_async(scenario)
+    assert [c.fetched_at for c in copies] == [newer, older]
+    assert all(c.owner_id == owner for c in copies)
+    assert none == []
+    assert fetched is not None and fetched.source_url == url and fetched.fetched_at == newer
+
+
+@pytest.mark.parametrize(
+    ("source_url", "fetched_at"),
+    [
+        ("http://docs.python.org/", datetime(2026, 11, 11, tzinfo=UTC)),
+        ("https://docs.python.org/", None),
+        (None, datetime(2026, 11, 11, tzinfo=UTC)),
+    ],
+)
+def test_the_database_rejects_an_incomplete_or_non_https_source(
+    migrated_url: str, source_url: str | None, fetched_at: datetime | None
+) -> None:
+    owner = unique_owner()
+    new = replace(new_document(), source_url=source_url, fetched_at=fetched_at)
+
+    async def scenario() -> None:
+        database = Database(migrated_url)
+        try:
+            async with database.session_for(owner, Role.USER) as session:
+                await SqlDocumentRepository(session).add(owner, new)
+        finally:
+            await database.dispose()
+
+    with pytest.raises(IntegrityError):
+        run_async(scenario)

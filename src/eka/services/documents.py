@@ -8,6 +8,7 @@ import hashlib
 import logging
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 from uuid import UUID
 
 from eka.domain.errors import NotFound, PayloadTooLarge, QuotaExceeded
@@ -36,7 +37,14 @@ class DocumentService:
         self._policy = policy
 
     async def upload(
-        self, owner_id: str, filename: str | None, declared_content_type: str | None, data: bytes
+        self,
+        owner_id: str,
+        filename: str | None,
+        declared_content_type: str | None,
+        data: bytes,
+        *,
+        source_url: str | None = None,
+        fetched_at: datetime | None = None,
     ) -> tuple[Document, bool]:
         """Validate, store and queue a file. Returns ``(document, created)``; uploading the same
         bytes again returns the existing document with ``created=False`` and stores nothing."""
@@ -71,6 +79,8 @@ class DocumentService:
                     size_bytes=len(data),
                     sha256=digest,
                     storage_key=key,
+                    source_url=source_url,
+                    fetched_at=fetched_at,
                 ),
             )
         except BaseException:
@@ -85,6 +95,9 @@ class DocumentService:
         if document is None:
             raise NotFound()
         return document
+
+    async def web_copies(self, owner_id: str, source_url: str) -> list[Document]:
+        return await self._repository.web_copies(owner_id, source_url)
 
     async def list(
         self,

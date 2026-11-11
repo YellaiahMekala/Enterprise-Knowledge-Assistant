@@ -123,6 +123,12 @@
           "verified": {
             "title": "Verified",
             "type": "boolean"
+          },
+          "web_fallback": {
+            "default": false,
+            "description": "The answer used pages fetched by the web fallback (ADR-030).",
+            "title": "Web Fallback",
+            "type": "boolean"
           }
         },
         "required": [
@@ -150,6 +156,18 @@
             "title": "Document Id",
             "type": "string"
           },
+          "fetched_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fetched At"
+          },
           "filename": {
             "title": "Filename",
             "type": "string"
@@ -157,6 +175,16 @@
           "index": {
             "title": "Index",
             "type": "integer"
+          },
+          "kind": {
+            "default": "document",
+            "description": "web: a page fetched by the web fallback (ADR-030).",
+            "enum": [
+              "document",
+              "web"
+            ],
+            "title": "Kind",
+            "type": "string"
           },
           "locator": {
             "additionalProperties": true,
@@ -166,6 +194,17 @@
           "quote": {
             "title": "Quote",
             "type": "string"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
           }
         },
         "required": [
@@ -335,6 +374,18 @@
             ],
             "title": "Error Code"
           },
+          "fetched_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fetched At"
+          },
           "filename": {
             "title": "Filename",
             "type": "string"
@@ -358,6 +409,17 @@
           "size_bytes": {
             "title": "Size Bytes",
             "type": "integer"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
           },
           "status": {
             "$ref": "#/components/schemas/DocumentStatus"

@@ -134,3 +134,38 @@ def test_text_extensions_are_normalised_and_validated(monkeypatch: pytest.Monkey
         _local(allowed_text_extensions=("java",))
     with pytest.raises(ValidationError, match="extension"):
         _local(allowed_text_extensions=("./x",))
+
+
+WEB = {
+    "web_fallback_enabled": True,
+    "web_allowed_hosts": ["docs.python.org"],
+    "web_entry_urls": ["https://docs.python.org/3/tutorial/classes.html"],
+}
+
+
+def test_the_web_fallback_is_off_by_default() -> None:
+    assert _local().web_fallback_enabled is False
+
+
+def test_a_complete_web_fallback_configuration_is_accepted() -> None:
+    settings = _local(**WEB)
+    assert settings.web_entry_urls == ("https://docs.python.org/3/tutorial/classes.html",)
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"web_allowed_hosts": []},
+        {"web_allowed_hosts": ["*.python.org"]},
+        {"web_allowed_hosts": ["docs.python.org:8443"]},
+        {"web_entry_urls": []},
+        {"web_entry_urls": ["http://docs.python.org/3/"]},
+        {"web_entry_urls": ["https://evil.example.com/"]},
+        {"web_entry_urls": ["https://user@docs.python.org/"]},
+        {"web_entry_urls": [f"https://docs.python.org/{n}" for n in range(11)]},
+        {"allowed_text_extensions": [".txt"]},
+    ],
+)
+def test_an_incomplete_or_unsafe_web_configuration_fails_at_startup(override: dict) -> None:  # type: ignore[type-arg]
+    with pytest.raises(ValidationError):
+        _local(**{**WEB, **override})

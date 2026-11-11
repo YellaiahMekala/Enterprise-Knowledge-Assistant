@@ -39,6 +39,9 @@ class NewDocument:
     size_bytes: int
     sha256: str
     storage_key: str
+    # Set only for a page stored by the web fallback (ADR-030).
+    source_url: str | None = None
+    fetched_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +60,8 @@ class Document:
     chunk_count: int | None
     created_at: datetime
     updated_at: datetime
+    source_url: str | None = None
+    fetched_at: datetime | None = None
 
 
 class FileKind(StrEnum):
@@ -157,6 +162,16 @@ class Candidate:
 
 
 @dataclass(frozen=True, slots=True)
+class DocumentInfo:
+    """What a search result shows about its document."""
+
+    filename: str
+    content_type: str
+    source_url: str | None = None
+    fetched_at: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class SearchHit:
     """A ranked result. ``cosine`` is the question-to-chunk similarity, always set."""
 
@@ -168,6 +183,8 @@ class SearchHit:
     text: str
     fused: float
     cosine: float
+    source_url: str | None = None
+    fetched_at: datetime | None = None
 
 
 # --- answering (phase P4) ------------------------------------------------------------------------
@@ -195,6 +212,13 @@ class Citation:
     filename: str
     locator: Mapping[str, Any]
     quote: str
+    # A web citation (ADR-030) carries the page address and when it was fetched.
+    source_url: str | None = None
+    fetched_at: datetime | None = None
+
+    @property
+    def kind(self) -> Literal["document", "web"]:
+        return "web" if self.source_url else "document"
 
 
 @dataclass(frozen=True, slots=True)
@@ -231,3 +255,12 @@ class UsageEvent:
     prompt_chars: int
     completion_chars: int
     latency_ms: int
+
+
+@dataclass(frozen=True, slots=True)
+class WebPage:
+    """A page fetched by the web fallback. ``url`` is the final address after redirects."""
+
+    url: str
+    content_type: str
+    text: str

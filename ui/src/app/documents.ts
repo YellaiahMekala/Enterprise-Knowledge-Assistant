@@ -1,4 +1,5 @@
 import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
+import { DatePipe } from '@angular/common';
 import { ApiService } from './api.service';
 import { DocumentItem } from './models';
 
@@ -7,6 +8,7 @@ const ACCEPT = '.pdf,.docx,.csv,.md,.txt';
 
 @Component({
   selector: 'app-documents',
+  imports: [DatePipe],
   template: `
     <section class="card">
       <h1>Documents</h1>
@@ -27,7 +29,8 @@ const ACCEPT = '.pdf,.docx,.csv,.md,.txt';
           <tbody>
             @for (d of documents(); track d.id) {
               <tr>
-                <td>{{ d.filename }}</td>
+                <td>{{ d.filename }}
+                  @if (d.source_url) { <small class="muted">web page, fetched {{ d.fetched_at | date: 'short' }}</small> }</td>
                 <td><span class="badge" [class]="d.status">{{ d.status }}</span>
                   @if (d.error_code) { <small class="muted">{{ d.error_code }}</small> }</td>
                 <td>{{ d.chunk_count ?? '–' }}</td>

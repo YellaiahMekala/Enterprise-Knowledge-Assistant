@@ -21,6 +21,7 @@ from eka.domain.models import (
     ClaimedDocument,
     Conversation,
     Document,
+    DocumentInfo,
     DocumentStatus,
     NewChunk,
     NewDocument,
@@ -113,6 +114,8 @@ class InMemoryDocumentRepository:
             chunk_count=None,
             created_at=now,
             updated_at=now,
+            source_url=new.source_url,
+            fetched_at=new.fetched_at,
         )
         self.rows[new.id] = document
         return document, True
@@ -126,6 +129,14 @@ class InMemoryDocumentRepository:
             if row.owner_id == owner_id and row.sha256 == sha256:
                 return row
         return None
+
+    async def web_copies(self, owner_id: str, source_url: str) -> list[Document]:
+        rows = [
+            row
+            for row in self.rows.values()
+            if row.owner_id == owner_id and row.source_url == source_url
+        ]
+        return sorted(rows, key=lambda r: r.fetched_at or r.created_at, reverse=True)
 
     async def count_by_owner(self, owner_id: str) -> int:
         return sum(1 for row in self.rows.values() if row.owner_id == owner_id)
@@ -222,6 +233,7 @@ class InMemoryChunkSearch:
     def __init__(self) -> None:
         # document id -> (owner, filename, content type, created at)
         self.documents: dict[UUID, tuple[str, str, str, datetime]] = {}
+        self.web_sources: dict[UUID, tuple[str, datetime]] = {}
         self.chunks: list[dict[str, Any]] = []
         self.exact_flags: list[bool] = []
 
@@ -233,9 +245,12 @@ class InMemoryChunkSearch:
         *,
         content_type: str = "text/plain",
         created_at: datetime | None = None,
+        source_url: str | None = None,
     ) -> None:
         when = created_at or datetime(2026, 11, 1, tzinfo=UTC)
         self.documents[document_id] = (owner, filename, content_type, when)
+        if source_url is not None:
+            self.web_sources[document_id] = (source_url, when)
 
     def add_chunk(
         self, owner: str, document_id: UUID, text: str, vector: list[float], ordinal: int = 0
@@ -336,9 +351,9 @@ class InMemoryChunkSearch:
 
     async def document_info(
         self, owner_id: str, document_ids: Sequence[UUID]
-    ) -> dict[UUID, tuple[str, str]]:
+    ) -> dict[UUID, DocumentInfo]:
         return {
-            document_id: (name, content_type)
+            document_id: DocumentInfo(name, content_type, *self.web_sources.get(document_id, ()))
             for document_id, (owner, name, content_type, _when) in self.documents.items()
             if owner == owner_id and document_id in document_ids
         }

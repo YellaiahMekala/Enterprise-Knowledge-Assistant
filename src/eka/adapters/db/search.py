@@ -12,7 +12,7 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from eka.domain.models import Candidate, SearchFilters
+from eka.domain.models import Candidate, DocumentInfo, SearchFilters
 
 _VECTOR = "CAST(:vector AS vector)"
 
@@ -168,14 +168,17 @@ class SqlChunkSearch:
 
     async def document_info(
         self, owner_id: str, document_ids: Sequence[UUID]
-    ) -> dict[UUID, tuple[str, str]]:
+    ) -> dict[UUID, DocumentInfo]:
         if not document_ids:
             return {}
         result = await self._session.execute(
             text(
-                "SELECT id, filename, content_type FROM documents "
+                "SELECT id, filename, content_type, source_url, fetched_at FROM documents "
                 "WHERE owner_id = :owner AND id = ANY(CAST(:ids AS uuid[]))"
             ),
             {"owner": owner_id, "ids": list(document_ids)},
         )
-        return {row.id: (row.filename, row.content_type) for row in result}
+        return {
+            row.id: DocumentInfo(row.filename, row.content_type, row.source_url, row.fetched_at)
+            for row in result
+        }

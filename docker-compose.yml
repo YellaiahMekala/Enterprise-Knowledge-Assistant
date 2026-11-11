@@ -47,6 +47,10 @@ services:
       EKA_DATABASE_URL: postgresql+psycopg://eka:${EKA_DB_PASSWORD}@db:5432/eka
       EKA_AUTH_MODE: api_key
       EKA_API_KEYS: ${EKA_API_KEYS:?Set EKA_API_KEYS in .env (see .env.example)}
+      # Optional web fallback (ADR-030), off unless set in .env.
+      EKA_WEB_FALLBACK_ENABLED: ${EKA_WEB_FALLBACK_ENABLED:-false}
+      EKA_WEB_ALLOWED_HOSTS: ${EKA_WEB_ALLOWED_HOSTS:-[]}
+      EKA_WEB_ENTRY_URLS: ${EKA_WEB_ENTRY_URLS:-[]}
     volumes:
       - eka-files:/data/files
 
@@ -86,6 +90,10 @@ services:
       EKA_DATABASE_URL: postgresql+psycopg://eka:${EKA_DB_PASSWORD}@db:5432/eka
       EKA_AUTH_MODE: gateway
       EKA_GATEWAY_JWKS_URL: http://edge:8081/actuator/jwks
+      # Optional web fallback (ADR-030), off unless set in .env.
+      EKA_WEB_FALLBACK_ENABLED: ${EKA_WEB_FALLBACK_ENABLED:-false}
+      EKA_WEB_ALLOWED_HOSTS: ${EKA_WEB_ALLOWED_HOSTS:-[]}
+      EKA_WEB_ENTRY_URLS: ${EKA_WEB_ENTRY_URLS:-[]}
     volumes:
       - eka-files:/data/files
 

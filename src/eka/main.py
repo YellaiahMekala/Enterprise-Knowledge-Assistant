@@ -19,6 +19,7 @@ from eka.adapters.db.repositories import SqlConversationRepository, SqlDocumentR
 from eka.adapters.db.search import SqlChunkSearch
 from eka.adapters.reranker_fastembed import FastEmbedReranker
 from eka.adapters.storage import build_file_store
+from eka.adapters.web_fetch import SafeFetcher
 from eka.api import admin, chat, documents, health, me, search
 from eka.api.deps import DocumentServiceFactory, ReadinessCheck
 from eka.api.errors import install_error_handlers
@@ -41,6 +42,7 @@ from eka.services.retrieval import (
     RetrievalServiceFactory,
     RetrievalSettings,
 )
+from eka.services.web_fallback import WebFallback, WebSettings
 
 
 async def _database_not_configured() -> None:
@@ -69,6 +71,26 @@ def _document_services(settings: Settings, database: Database | None) -> Documen
         return scope()
 
     return open_for
+
+
+def _web_fallback(settings: Settings, database: Database | None) -> WebFallback | None:
+    if not settings.web_fallback_enabled:
+        return None
+    fetcher = SafeFetcher(
+        settings.web_allowed_hosts,
+        max_bytes=settings.web_max_page_kb * 1024,
+        timeout_seconds=settings.web_fetch_timeout_seconds,
+    )
+    return WebFallback(
+        fetcher,
+        _document_services(settings, database),
+        WebSettings(
+            entry_urls=settings.web_entry_urls,
+            refresh_hours=settings.web_refresh_hours,
+            wait_seconds=settings.web_ingest_wait_seconds,
+            max_text_bytes=settings.max_text_file_kb * 1024,
+        ),
+    )
 
 
 def _reranker(settings: Settings) -> Reranker | None:
@@ -172,6 +194,7 @@ def _answer_service(
             history_messages=settings.history_messages,
             max_output_tokens=settings.max_output_tokens,
         ),
+        web=_web_fallback(settings, database),
     )
 
 

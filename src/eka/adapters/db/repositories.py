@@ -1,6 +1,7 @@
 """Repository implementations. Each method filters by ``owner_id`` explicitly (layer one of
 ADR-012); the session's row-level security is layer two."""
 
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 
@@ -37,6 +38,8 @@ def _to_document(row: RowMapping) -> Document:
         chunk_count=row["chunk_count"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],
+        source_url=row["source_url"],
+        fetched_at=row["fetched_at"],
     )
 
 
@@ -55,6 +58,8 @@ class SqlDocumentRepository:
                 size_bytes=new.size_bytes,
                 sha256=new.sha256,
                 storage_key=new.storage_key,
+                source_url=new.source_url,
+                fetched_at=new.fetched_at,
             )
             .on_conflict_do_nothing(constraint="documents_owner_sha256_key")
             .returning(documents)
@@ -99,6 +104,14 @@ class SqlDocumentRepository:
         row = result.mappings().first()
         return _to_document(row) if row is not None else None
 
+    async def web_copies(self, owner_id: str, source_url: str) -> list[Document]:
+        result = await self._session.execute(
+            select(documents)
+            .where(documents.c.owner_id == owner_id, documents.c.source_url == source_url)
+            .order_by(documents.c.fetched_at.desc())
+        )
+        return [_to_document(row) for row in result.mappings()]
+
     async def count_by_owner(self, owner_id: str) -> int:
         result = await self._session.execute(
             select(func.count()).select_from(documents).where(documents.c.owner_id == owner_id)
@@ -122,6 +135,8 @@ def citation_to_json(citation: Citation) -> dict[str, Any]:
         "filename": citation.filename,
         "locator": dict(citation.locator),
         "quote": citation.quote,
+        "source_url": citation.source_url,
+        "fetched_at": citation.fetched_at.isoformat() if citation.fetched_at else None,
     }
 
 
@@ -133,6 +148,8 @@ def citation_from_json(data: dict[str, Any]) -> Citation:
         filename=data["filename"],
         locator=data["locator"],
         quote=data["quote"],
+        source_url=data.get("source_url"),
+        fetched_at=datetime.fromisoformat(data["fetched_at"]) if data.get("fetched_at") else None,
     )
 
 

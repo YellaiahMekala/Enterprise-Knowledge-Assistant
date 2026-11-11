@@ -1,4 +1,5 @@
 import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
+import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiError, ApiService, toMessage } from './api.service';
 import { applyEvent, startAnswer } from './chat-state';
@@ -6,7 +7,7 @@ import { Citation, Conversation, Message, Mode } from './models';
 
 @Component({
   selector: 'app-chat',
-  imports: [FormsModule],
+  imports: [FormsModule, DatePipe],
   template: `
     <div class="chat">
       <aside class="card">
@@ -35,7 +36,15 @@ import { Citation, Conversation, Message, Mode } from './models';
               @if (m.citations.length > 0) {
                 <ol class="citations">
                   @for (c of m.citations; track c.chunk_id) {
-                    <li><strong>[{{ c.index }}] {{ c.filename }}</strong> {{ where(c) }}<blockquote>{{ c.quote }}</blockquote></li>
+                    <li>
+                      @if (c.kind === 'web' && c.source_url) {
+                        <strong>[{{ c.index }}] <a [href]="c.source_url" target="_blank" rel="noopener noreferrer">{{ c.source_url }}</a></strong>
+                        <small class="muted">web page, fetched {{ c.fetched_at | date: 'medium' }}</small>
+                      } @else {
+                        <strong>[{{ c.index }}] {{ c.filename }}</strong> {{ where(c) }}
+                      }
+                      <blockquote>{{ c.quote }}</blockquote>
+                    </li>
                   }
                 </ol>
               }
@@ -164,7 +173,16 @@ export class Chat implements OnInit, OnDestroy {
   }
 
   protected where(c: Citation): string {
-    const page = c.locator['page'];
-    return page ? `(page ${page})` : '';
+    const l = c.locator;
+    switch (l['type']) {
+      case 'page':
+        return `(page ${l['page']})`;
+      case 'lines':
+        return `(lines ${l['start']}-${l['end']})`;
+      case 'rows':
+        return `(rows ${l['start']}-${l['end']})`;
+      default:
+        return '';
+    }
   }
 }

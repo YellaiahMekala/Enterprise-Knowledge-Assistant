@@ -31,6 +31,8 @@ class DocumentOut(BaseModel):
     chunk_count: int | None
     created_at: datetime
     updated_at: datetime
+    source_url: str | None = None
+    fetched_at: datetime | None = None
 
     @classmethod
     def from_domain(cls, document: Document) -> Self:
@@ -45,6 +47,8 @@ class DocumentOut(BaseModel):
             chunk_count=document.chunk_count,
             created_at=document.created_at,
             updated_at=document.updated_at,
+            source_url=document.source_url,
+            fetched_at=document.fetched_at,
         )
 
 

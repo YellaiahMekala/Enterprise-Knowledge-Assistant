@@ -115,23 +115,25 @@ class RetrievalService:
             similarity.update(await self._search.cosine(owner_id, vector, missing))
 
         document_ids_in_hits = list({by_id[chunk_id].document_id for chunk_id in best})
-        names = await self._search.document_info(owner_id, document_ids_in_hits)
+        info = await self._search.document_info(owner_id, document_ids_in_hits)
         hits: list[SearchHit] = []
         for chunk_id in best:
             candidate = by_id[chunk_id]
-            if candidate.document_id not in names or chunk_id not in similarity:
+            document = info.get(candidate.document_id)
+            if document is None or chunk_id not in similarity:
                 continue
-            filename, _content_type = names[candidate.document_id]
             hits.append(
                 SearchHit(
                     rank=len(hits) + 1,
                     chunk_id=chunk_id,
                     document_id=candidate.document_id,
-                    filename=filename,
+                    filename=document.filename,
                     locator=candidate.locator,
                     text=candidate.text,
                     fused=fused[chunk_id],
                     cosine=similarity[chunk_id],
+                    source_url=document.source_url,
+                    fetched_at=document.fetched_at,
                 )
             )
         return hits

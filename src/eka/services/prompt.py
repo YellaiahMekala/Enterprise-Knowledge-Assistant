@@ -26,6 +26,7 @@ REWRITE_SYSTEM_PROMPT = (
 )
 
 _MAX_HISTORY_CHARS = 1500
+_WEB_ORIGIN = ' origin="web page"'
 _ANGLE = re.compile(r"[<>]")
 _ATTRIBUTE_UNSAFE = re.compile(r'[<>"]')
 
@@ -77,8 +78,9 @@ def build_answer_messages(
     question: str, passages: Sequence[SearchHit], history: Sequence[StoredMessage]
 ) -> list[ChatMessage]:
     blocks = [
-        f'<passage n="{number}" source="{attribute(hit.filename)}" '
-        f'location="{attribute(describe_locator(hit.locator))}">\n'
+        f'<passage n="{number}" source="{attribute(hit.source_url or hit.filename)}" '
+        f'location="{attribute(describe_locator(hit.locator))}"'
+        f"{_WEB_ORIGIN if hit.source_url else ''}>\n"
         f"{neutralise(hit.text)}\n</passage>"
         for number, hit in enumerate(passages, start=1)
     ]

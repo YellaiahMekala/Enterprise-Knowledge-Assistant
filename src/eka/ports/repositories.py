@@ -43,6 +43,10 @@ class DocumentRepository(Protocol):
         """The owner's document with these exact bytes, or ``None``."""
         ...
 
+    async def web_copies(self, owner_id: str, source_url: str) -> list[Document]:
+        """The owner's stored copies of a web page, newest fetch first."""
+        ...
+
     async def count_by_owner(self, owner_id: str) -> int:
         """How many documents the owner holds (for the quota)."""
         ...

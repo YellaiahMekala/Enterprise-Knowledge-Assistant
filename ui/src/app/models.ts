@@ -8,6 +8,9 @@ export interface Citation {
   index: number;
   locator: Record<string, unknown>;
   quote: string;
+  kind?: 'document' | 'web';
+  source_url?: string | null;
+  fetched_at?: string | null;
 }
 
 export interface DocumentItem {
@@ -21,6 +24,8 @@ export interface DocumentItem {
   error_code: string | null;
   created_at: string;
   updated_at: string;
+  source_url?: string | null;
+  fetched_at?: string | null;
 }
 
 export interface Conversation {

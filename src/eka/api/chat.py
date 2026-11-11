@@ -66,6 +66,11 @@ class CitationOut(BaseModel):
     filename: str
     locator: dict[str, Any]
     quote: str
+    kind: Literal["document", "web"] = Field(
+        default="document", description="web: a page fetched by the web fallback (ADR-030)."
+    )
+    source_url: str | None = None
+    fetched_at: datetime | None = None
 
 
 class ChatResponse(BaseModel):
@@ -77,6 +82,9 @@ class ChatResponse(BaseModel):
     refusal_reason: str | None
     mode: Literal["verified", "fast"]
     verified: bool
+    web_fallback: bool = Field(
+        default=False, description="The answer used pages fetched by the web fallback (ADR-030)."
+    )
 
 
 class MessageOut(BaseModel):
@@ -102,6 +110,9 @@ class MessageOut(BaseModel):
                     filename=c.filename,
                     locator=dict(c.locator),
                     quote=c.quote,
+                    kind=c.kind,
+                    source_url=c.source_url,
+                    fetched_at=c.fetched_at,
                 )
                 for c in message.citations
             ],

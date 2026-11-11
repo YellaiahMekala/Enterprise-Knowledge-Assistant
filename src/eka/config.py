@@ -3,6 +3,7 @@
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal, Self
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -116,6 +117,33 @@ class Settings(BaseSettings):
     max_context_chars: int = Field(default=12_000, ge=500)
     history_messages: int = Field(default=6, ge=0, le=50)
     max_output_tokens: int = Field(default=600, ge=16, le=4000)
+
+    # --- web fallback (ADR-030), off by default ---
+    # Exact host names, e.g. ["docs.python.org"]; no wildcards. Entry URLs must be on them.
+    web_fallback_enabled: bool = False
+    web_allowed_hosts: tuple[str, ...] = ()
+    web_entry_urls: tuple[str, ...] = ()
+    web_refresh_hours: int = Field(default=24, ge=1)
+    web_fetch_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
+    web_max_page_kb: int = Field(default=2048, ge=16, le=10_240)
+    web_ingest_wait_seconds: float = Field(default=30.0, gt=0, le=120)
+
+    @model_validator(mode="after")
+    def _web_fallback_is_fully_configured(self) -> Self:
+        if not self.web_fallback_enabled:
+            return self
+        hosts = {host.strip().lower() for host in self.web_allowed_hosts}
+        if not hosts or any(not h or "*" in h or "/" in h or ":" in h for h in hosts):
+            raise ValueError("EKA_WEB_ALLOWED_HOSTS must list exact host names")
+        if not self.web_entry_urls or len(self.web_entry_urls) > 10:
+            raise ValueError("EKA_WEB_ENTRY_URLS must list 1 to 10 URLs")
+        for url in self.web_entry_urls:
+            parts = urlsplit(url)
+            if parts.scheme != "https" or parts.username or (parts.hostname or "") not in hosts:
+                raise ValueError("each EKA_WEB_ENTRY_URLS entry must be https on an allowed host")
+        if ".md" not in self.allowed_text_extensions:
+            raise ValueError("the web fallback stores pages as .md; keep it in the allowed types")
+        return self
 
     @field_validator("allowed_text_extensions")
     @classmethod

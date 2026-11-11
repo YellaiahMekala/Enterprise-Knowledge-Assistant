@@ -49,9 +49,17 @@ documents = Table(
     Column("locked_at", DateTime(timezone=True)),
     Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
     Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    Column("source_url", Text),
+    Column("fetched_at", DateTime(timezone=True)),
     UniqueConstraint("owner_id", "sha256", name="documents_owner_sha256_key"),
 )
 Index("documents_owner_created", documents.c.owner_id, documents.c.created_at.desc())
+Index(
+    "documents_owner_source_url",
+    documents.c.owner_id,
+    documents.c.source_url,
+    postgresql_where=text("source_url IS NOT NULL"),
+)
 Index(
     "documents_queue",
     documents.c.created_at,
