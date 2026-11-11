@@ -16,7 +16,13 @@ How the UI signs in is chosen when it is built or served (`src/app/auth-config.t
 Single sign-on uses the authorization code flow with PKCE against Keycloak, without a client secret
 or a library (`src/app/oidc.ts`). It checks the `state` and the id token's `nonce`, uses each PKCE
 verifier once, and on sign-out also ends the Keycloak session. Tokens stay in `sessionStorage` for
-the tab and are not refreshed: after 15 minutes you sign in again.
+the tab. When the 15-minute access token has expired, the next request first swaps the refresh token
+for a new pair (`SessionService.fresh`, one renewal shared by concurrent requests); Keycloak rotates
+refresh tokens, so each works once. If the renewal fails (30 idle minutes, 8 hours, or a reused
+token) the session is cleared and the request's 401 leads back to the sign-in page.
+
+Web citations (from the optional web fallback) show the page link and its fetch date instead of a
+file name.
 
 Before `npm run start:sso`:
 

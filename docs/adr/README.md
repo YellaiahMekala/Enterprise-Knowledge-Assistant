@@ -35,7 +35,7 @@ Template: Status, Date, Decision owner, Review trigger, Related requirements or 
 | [ADR-027](ADR-027-observability-otel-micrometer.md) | Observability with OpenTelemetry trace context and Prometheus metrics | Proposed |
 | [ADR-028](ADR-028-slo-error-budget-alerts-as-code.md) | SLOs, error budgets and alerts as code | Proposed |
 | [ADR-029](ADR-029-code-aware-chunking.md) | Code and text loaders with code-aware chunking and a line-range locator | Proposed |
-| [ADR-030](ADR-030-allowlisted-web-fallback.md) | Allowlisted web fallback for official documentation (optional, Planned) | Proposed |
+| [ADR-030](ADR-030-allowlisted-web-fallback.md) | Allowlisted web fallback for official documentation (optional, off by default) | Accepted |
 | [ADR-031](ADR-031-verified-and-fast-streaming-modes.md) | Verified (default) and fast streaming modes | Proposed |
 | [ADR-032](ADR-032-optional-cross-encoder-reranking.md) | Optional cross-encoder reranking, off by default | Accepted |
 | [ADR-033](ADR-033-incident-triage-agent.md) | Incident triage agent as a separate service | Accepted |

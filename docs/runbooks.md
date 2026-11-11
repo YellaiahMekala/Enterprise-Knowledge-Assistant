@@ -84,3 +84,12 @@ scripts/restore_drill.sh                     # backup, restore to scratch, compa
 - Uploaded files live in the `storage` volume, separately from the database. Back that volume up at the same time, or restored documents will point to missing files.
 
 **Drill result, 2026-11-07, local:** passed in 8 s. Migration version, row counts (documents, chunks, vectors, conversations, messages) and the 5 tables with forced row-level security matched.
+
+## Web fallback gives no answer (optional feature, ADR-030)
+
+Not an alert; for when `EKA_WEB_FALLBACK_ENABLED=true` and weak-evidence questions are still refused.
+
+1. Search the API log (Grafana, Loki): `{service="api"} |= "web f"`. `web fallback fetched=1 ready=1` means the page was stored and indexed; the refusal then came from the page itself (weak match, or the model declined).
+2. `web fetch refused host=... reason=...` gives a fixed reason: `host_not_allowed` (a redirect left the allowlist; add the target host only if it is official), `private_address` (the name resolves to a private or loopback address; do not allow it), `not_https`, `too_large` (raise `EKA_WEB_MAX_PAGE_KB` with care), `content_type`, `timeout`, `dns`, `network`, `http_<status>`.
+3. `ready=0` with `web pages still being processed`: the worker did not finish within `EKA_WEB_INGEST_WAIT_SECONDS`. The page is used from the next question on; check the worker log and the document's status.
+4. A page is fetched again only after `EKA_WEB_REFRESH_HOURS`. To force a refresh, delete the user's copy (it is listed among their documents with its source URL).

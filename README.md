@@ -31,23 +31,24 @@ the history.
 
 | Area | What exists | How it was checked |
 |---|---|---|
-| Core API (FastAPI) | Typed settings that refuse a half-configured start, problem+json errors with a request id, liveness and readiness probes | 554 tests collected. On 2026-11-11 the 484 offline tests ran locally (479 pass, 5 skipped); CI runs all of them, including the integration tests on a real PostgreSQL (coverage last measured at 522 tests: 91.7%, gate 85%) |
+| Core API (FastAPI) | Typed settings that refuse a half-configured start, problem+json errors with a request id, liveness and readiness probes | 621 tests collected. On 2026-11-11 the whole suite ran locally, including the integration tests on a real PostgreSQL: 616 pass, 5 skipped, coverage 91.1% (gate 85%). CI runs the same suite |
 | Authentication | API-key mode (SHA-256 digests, constant-time compare) and gateway mode (ES256 internal token from the edge, key set fetched from the edge) | Unit tests; a token minted by the real edge verifies in the core; behind the edge the core answers 401 to an identity-provider token, an API key and no credential |
 | Isolation | Owner-scoped repositories plus row-level security that fails closed; leakage tests through search | Integration tests; two users through the edge see only their own documents |
-| Ingestion | Upload (PDF, DOCX, CSV, code, text) validated by content, background worker, local BGE-small embeddings | 13 mixed files ingested through the Docker stack |
+| Ingestion | Upload (PDF, DOCX, CSV, code, text) validated by content, background worker, local BGE-small embeddings | 13 mixed files ingested through the Docker stack. On 2026-11-11 a DOCX with headings and a table, a CSV and a Java file went through it again: all ready, answers cited by section, by rows and by lines |
 | Retrieval | Dense (pgvector HNSW) and full-text candidates fused by reciprocal rank; metadata filters; refusal gate on cosine similarity | Tests; evaluation below |
 | Chat | Cited answers over JSON or server-sent events; verified mode (default) and fast mode; conversation memory; OpenAI-compatible adapter | Run with the fake model only: a cited answer, a `weak_evidence` refusal, both stream modes. No live model was used |
 | Edge (Spring Cloud Gateway, Java 21) | OIDC token validation, credential swap to a 60-second internal token, per-user rate limit, audit log, SSE passthrough with client-disconnect cancel, problem+json for upstream failures, circuit breaker on the core route (fast 503 `circuit-open` while open), Prometheus on a private port | 43 tests (hung-core drill, breaker opens after repeated timeouts and its state is exported, streaming spike); through the real image: bad tokens 401, role mapping, tokens spaced about 100 ms apart, 12 of 45 rapid requests limited |
 | Observability | Admin-only `/api/v1/admin/metrics`, request counts and latency by route template; Prometheus and Grafana as an opt-in Compose profile; SLO recording rules and 4 alerts as code plus a watchdog, each linked to a runbook; the watchdog (`EkaAlertDeliveryFailing`) is emailed directly when Alertmanager cannot reach the triage agent; container logs collected by Alloy into Loki (same profile), labelled by Compose service and searchable in Grafana | Prometheus scraped core and edge; the dashboard loaded in Grafana; `promtool test rules` passes 5 alert test cases; watchdog drill with the agent stopped: email in the local catcher after 70 s; Loki received the core's JSON log lines and a live test searched them |
 | Operations | [Runbooks](docs/runbooks.md) per alert, SLOs with error budget, database backup and restore scripts, restore drill | Restore drill passed: migration version, row counts and row-level security identical after restore (8 s, local data) |
-| Web UI (Angular) | Sign-in by API key (default build) or single sign-on through Keycloak (`--configuration sso`: authorization code with PKCE, bearer token to the edge, sign-out also ends the Keycloak session); document upload and status, streamed chat with citations, conversation list | 26 unit tests (PKCE against the RFC 7636 example, state and nonce checks, one-use verifier, token exchange, session). API-key mode: a scripted browser run passed 10 times in a row. Single sign-on: one run in real Chrome through Keycloak and the edge (sign-in, upload, cited answer, sign-out; signing in again asked for the password) |
-| Identity provider | Keycloak realm in Compose (`--profile idp`) with two test users and an `eka-admin` role | 7 end-to-end checks through the real edge (`scripts/keycloak_e2e.sh`): no or bad token 401, user 200, admin route 403 for a user and 200 for the admin, role claim mapped |
+| Web UI (Angular) | Sign-in by API key (default build) or single sign-on through Keycloak (`--configuration sso`: authorization code with PKCE, bearer token to the edge, sign-out also ends the Keycloak session, an expired access token renewed with the refresh token before the next request); document upload and status, streamed chat with citations (web citations show the link and fetch date), conversation list | 32 unit tests (PKCE against the RFC 7636 example, state and nonce checks, one-use verifier, token exchange, refresh, one shared renewal for concurrent requests, session). API-key mode: a scripted browser run passed 10 times in a row. Single sign-on: real Chrome through Keycloak and the edge (sign-in, upload, cited answer, sign-out; signing in again asked for the password). Refresh: with the stored token marked expired, the app renewed it before the document list and before a streamed answer (both 200); a broken refresh token cleared the session and returned to the sign-in page |
+| Identity provider | Keycloak realm in Compose (`--profile idp`) with two test users and an `eka-admin` role | 7 end-to-end checks through the real edge (`scripts/keycloak_e2e.sh`): no or bad token 401, user 200, admin route 403 for a user and 200 for the admin, role claim mapped. Refresh tokens rotate (single use, 30-minute idle and 8-hour session limits): a refreshed token passed the edge, reusing the old refresh token was refused, and after that attempt Keycloak refused the newer one too |
 | File storage | Local disk (default) or S3 / any S3-compatible server (`EKA_STORAGE_BACKEND=s3`), chosen in one place | 9 tests against an in-process fake S3, and 2 against a real S3-compatible server in a container |
 | Reranking (experiment E3) | Optional cross-encoder over the top 20 candidates, off by default ([ADR-032](docs/adr/ADR-032-optional-cross-encoder-reranking.md)) | Evaluation: Hit@1 95.5% to 100%, MRR 0.977 to 1.000 (2 of 44 questions); about 560 ms extra per query on a laptop CPU |
 | Incident triage agent (LangChain4j, Java 21) | Receives Alertmanager webhooks, investigates with 4 read-only tools (PromQL query, service health, runbook, log search in Loki), emails a report; token-protected, call budget, audit log, runbook-only fallback ([ADR-033](docs/adr/ADR-033-incident-triage-agent.md), [ADR-035](docs/adr/ADR-035-log-search-loki.md)) | 55 tests including the full tool loop with a scripted model (2 of them need a real Loki and passed against one); drills against the real stack: a synthetic alert and a real one (core stopped, Prometheus fired `EkaTargetDown`, email in about 4 minutes) both arrived in a local mail catcher. Not run with a live model or real SMTP |
 | Amazon Bedrock chat provider | `EKA_CHAT_PROVIDER=bedrock` through the Converse API, credentials from the AWS chain, no key in settings ([ADR-034](docs/adr/ADR-034-bedrock-provider-and-aws-deployment.md)). A local Converse stand-in (`python -m eka.tools.bedrock_stub`) lets the unchanged adapter and boto3 run without an account; `EKA_BEDROCK_ENDPOINT_URL` points at it and stays empty for real AWS | 10 tests against a stub client; 6 tests through real boto3 against the stand-in with fake keys (SigV4 signing, Converse JSON, the binary event stream); the 54 evaluation questions through the API with the Bedrock adapter, 54 answers recorded under the Bedrock model id. Never called Bedrock |
 | Provider comparison | `python -m eka.tools.answer_run` asks the evaluation questions through the API; `python -m eka.tools.compare_runs` puts two or more runs side by side (see below) | 3 tests; first table produced (below) |
 | AWS deployment (Terraform, `infra/aws`) | ECS Fargate (edge and core in one task, worker, migration task), RDS PostgreSQL 17, S3, Secrets Manager, load balancer, task role limited to the bucket and Bedrock | `terraform validate` and `fmt` pass (also in CI). Never planned or applied against an account |
+| Web fallback (optional, off by default) | When the user's own documents give weak or no evidence, fetches owner-configured entry pages from an exact-host allowlist, stores each as the user's Markdown document with its URL and fetch time, lets the worker index it, then answers from those pages only; citations are typed `web` with URL and fetch date ([ADR-030](docs/adr/ADR-030-allowlisted-web-fallback.md)). The fetcher allows only https on allowlisted hosts, refuses names that resolve to private, loopback, link-local or metadata addresses, connects to the address it checked (TLS still verifies the host name), re-checks every redirect and caps size, time and content type | 63 tests (fetcher, HTML to Markdown, service, answering, settings, database columns). Live, against docs.python.org: first weak-evidence question answered from the fetched page in 14 s (47 chunks), the next question in 0.1 s from the stored copy, an off-topic question still refused; from inside the container `localhost` was refused as a private address, a redirect to a host off the list was refused, plain http was refused |
 | API contract | Postman collection | 36 assertions, 0 failures against the Compose stack |
 
 ### Load, local run (10 users for 20 s, fake chat model, 13 documents)
@@ -143,12 +144,11 @@ Equal scores are expected: the stand-in answers with the same offline model. The
 | Full hand scoring of live answers | Only the misses were read (see above) |
 | Other models and the real cross-provider table | Only `gpt-4o-mini` was run live; the comparison pipeline is ready and needs Bedrock access (an AWS account and approval of the spend) |
 | Entra ID or other hosted identity provider | Tested against Keycloak only |
-| UI token refresh | The UI does not refresh tokens: after the 15-minute access token expires, the user signs in again |
 | Real email delivery | Verified only into a local mail catcher; real SMTP not tried |
 | Agent failing after it accepted an alert | The watchdog covers failed deliveries to the agent, not an agent that accepts the alert and then fails to send its email |
 | Agent log search with a live model | `searchLogs` was tested with a scripted model and against a real Loki, not with a live model |
 | Logs on AWS | Alloy reads the local Docker socket; on AWS the logs would go to CloudWatch, which is not built |
-| Allowlisted web fallback (ADR-030) | Not built; off by design |
+| Web fallback beyond fixed entry pages | v1 fetches only the configured entry URLs (no search engine, no crawling), and only with the fake model so far. A page that the worker has not indexed within 30 s is used from the next question on |
 | Real Bedrock call, real AWS deployment | Needs an AWS account; the adapter has run end to end only against the local stand-in, and the Terraform is validated only |
 
 ## Tech stack
@@ -257,6 +257,7 @@ Compose needs the settings from `.env` (it refuses to start without `EKA_DB_PASS
 | `EKA_AUTH_MODE` | none (required) | `api_key` (the core on its own) or `gateway` (behind the edge: only the edge's internal token is accepted; needs `EKA_GATEWAY_JWKS_URL`) |
 | `EKA_API_KEYS` | none (required in `api_key` mode) | JSON object: `{"<user-id>": {"sha256": "<64 hex characters>", "role": "user"}}` with role `user` or `admin` |
 | `EKA_DB_PASSWORD`, `EKA_DB_PORT` | none (required), `5432` | Used by `docker-compose.yml` for the database service |
+| `EKA_WEB_FALLBACK_ENABLED` | `false` | Turns on the web fallback (ADR-030). Then `EKA_WEB_ALLOWED_HOSTS` (JSON list of exact host names) and `EKA_WEB_ENTRY_URLS` (JSON list of 1 to 10 https URLs on those hosts) are required; startup fails otherwise. Pages are refreshed after `EKA_WEB_REFRESH_HOURS` (24) |
 
 The chat provider (fake, OpenAI-compatible or Bedrock), file storage, reranker and limits are listed with comments in `.env.example`. Settings come from environment variables or a git-ignored `.env` file (copy `.env.example`). Secrets are supplied the same way and never committed.
 
@@ -295,6 +296,7 @@ src/eka/
   api/                routers, dependencies, the problem+json handler
   adapters/db/        engine and row-level-security session, table models, repositories
   tools/              hash_key, export_openapi, loadtest, answer_run, compare_runs, bedrock_stub
+  adapters/web_fetch.py  guarded HTTPS fetcher for the optional web fallback
 gateway/              Java 21 edge (Spring Cloud Gateway)
 ui/                   Angular web UI
 ops-agent/            incident triage agent (Java 21, LangChain4j): webhook, read-only tools, report email
@@ -322,10 +324,14 @@ Keycloak always issues tokens as `http://keycloak:8180`, the issuer the edge che
 `alice` or `boss` with the passwords from `.env`. The browser uses the authorization code flow with
 PKCE, without a client secret or a library (`ui/src/app/oidc.ts`). If the Keycloak container existed
 before 2026-11-11, recreate it once (`docker compose --profile idp up -d --force-recreate keycloak`)
-so the realm with the sign-out redirect is imported.
+so the realm with the sign-out redirect and refresh token rotation is imported. The test users
+have fixed ids there, so recreating Keycloak does not change which documents they see.
 
-Tests: `npm test` (26). The API key or token stays in `sessionStorage` for the tab only; tokens are
-not refreshed, so after 15 minutes you sign in again.
+Tests: `npm test` (32). The API key or tokens stay in `sessionStorage` for the tab only. The access
+token lives 15 minutes; when it has expired, the app swaps the refresh token for a new pair before
+the next request (one renewal shared by concurrent requests). Keycloak rotates refresh tokens and
+ends the session after 30 idle minutes or 8 hours; then the renewal fails and you sign in again.
+A Keycloak container created before this change must be recreated once to import these settings.
 
 ## Postman collection
 

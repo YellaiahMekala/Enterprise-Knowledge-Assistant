@@ -13,6 +13,7 @@
 |---|---|---|
 | 0.1 | 2026-10-31 | First draft: RAG core, Angular UI, Java gateway as design only |
 | 0.2 | 2026-10-31 | After external assessment: Java edge service becomes a delivered slice (FR-60 to FR-67); business outcomes, stakeholders and data classification added; operability, threat model, resilience and release-evidence requirements added (NFR-14 to NFR-18); phases renumbered (edge is P5); decisions moved to `adr/` |
+| 0.5 | 2026-11-11 | FR-37 Done (web fallback, ADR-030) with AC-23 met and R15 mitigated; FR-40 tokens now refreshed |
 | 0.4 | 2026-11-11 | Status updates: FR-40 Done (single sign-on in the UI through Keycloak and the edge); NFR-07 adds a log store (Loki); NFR-08 test counts refreshed |
 | 0.3 | 2026-10-31 | After an external review and owner decisions: code and text corpus (FR-36); optional allowlisted web fallback, Planned (FR-37); verified and fast answer modes (FR-38); evaluation challenge set (FR-51); decisions D-1, D-2, D-5 and D-6 recorded; AC-21 to AC-23; risks R15 and R16; R5, R8 and R14 updated |
 
@@ -163,7 +164,7 @@ Priority: **M** must · **S** should · **C** could. Phase refers to the Impleme
 ### 6.5 Interface
 | ID | Requirement | Pri | Status | Phase |
 |---|---|---|---|---|
-| FR-40 | Angular web UI: sign in with OIDC (authorization code with PKCE) through the edge; upload with live status; document list and delete; chat with streamed answers; clickable citations that show the passage; conversation list | M | Done: OIDC sign-in (authorization code with PKCE through Keycloak and the edge, `sso` build; run once in a real browser) or API-key sign-in against the core alone; upload with live status; document list and delete; streamed chat; conversation list. Differences: citations are listed under the answer with their passage rather than opened by a click, and tokens are not refreshed | P8 |
+| FR-40 | Angular web UI: sign in with OIDC (authorization code with PKCE) through the edge; upload with live status; document list and delete; chat with streamed answers; clickable citations that show the passage; conversation list | M | Done: OIDC sign-in (authorization code with PKCE through Keycloak and the edge, `sso` build; run once in a real browser) or API-key sign-in against the core alone; upload with live status; document list and delete; streamed chat; conversation list. Differences: citations are listed under the answer with their passage rather than opened by a click, and the passage is listed rather than opened by a click. Access tokens are renewed with a rotating refresh token (real Chrome run 2026-11-11) | P8 |
 | FR-41 | Admin view: requests, tokens, latency and refusals by user and day; document counts by status | S | Partial: admin API built; admin view in the UI Planned | P7 (API), P8 (view) |
 
 ### 6.6 Quality and operations (core)
@@ -192,7 +193,7 @@ FR-52 status: both endpoints exist and are tested; readiness currently checks no
 | ID | Requirement | Pri | Status | Phase |
 |---|---|---|---|---|
 | FR-36 | Ingest code and text files (`.java`, `.md`, `.txt`, `.xml`, `.sql` and similar allow-listed extensions): UTF-8 only, size-capped, binary rejected; chunk preferring class and method boundaries; locator is file plus line range | S | Done | P2 |
-| FR-37 | Optional web fallback: when the user's documents give weak evidence, fetch from an owner-configured allowlist of official HTTPS sites only (SSRF-safe, size and time capped, redirects re-checked), treat the page as untrusted, store it as a document with source URL and fetch date, and cite it as a web source distinct from document citations | C | Planned (optional) | P4b |
+| FR-37 | Optional web fallback: when the user's documents give weak evidence, fetch from an owner-configured allowlist of official HTTPS sites only (SSRF-safe, size and time capped, redirects re-checked), treat the page as untrusted, store it as a document with source URL and fetch date, and cite it as a web source distinct from document citations | C | Done, off by default (2026-11-11): owner-configured entry URLs only, no search engine or crawling; run live against docs.python.org with the fake model | P4b |
 | FR-38 | Two answer-streaming modes: **verified** (default) releases text only after citations validate; **fast** (optional) streams immediately, marks text provisional, and the final event confirms or replaces it | M | Done | P4 |
 
 ## 7. Non-functional requirements
@@ -246,7 +247,7 @@ All numeric targets are **targets, not measurements**. They are verified in P6, 
 | AC-20 | NFR-18 | Each claim listed in the README maps to a row in the evidence ledger with a date and a link or file. |
 | AC-21 | FR-36 | A `.java` file and a Markdown file reach `ready`; a chunk never splits inside a method when the method fits the budget; the citation locator is file plus line range; a binary file renamed `.java` is rejected. |
 | AC-22 | FR-38 | In verified mode a response with an invalid citation never sends the invalid text to the client; in fast mode the text is marked provisional until `done`, and a failed validation replaces it with a refusal. |
-| AC-23 | FR-37 | Planned. Requests to hosts outside the allowlist, to private or link-local addresses, and redirects leaving the allowlist are refused; a web answer carries a web citation with URL and fetch date. |
+| AC-23 | FR-37 | Met (63 tests; live checks from the container: loopback name refused, redirect off the list refused, http refused; a web answer cited the URL and fetch time). Requests to hosts outside the allowlist, to private or link-local addresses, and redirects leaving the allowlist are refused; a web answer carries a web citation with URL and fetch date. |
 
 ## 9. Risks
 
@@ -266,7 +267,7 @@ All numeric targets are **targets, not measurements**. They are verified in P6, 
 | R12 | Fail-closed auditing makes sensitive actions unavailable when the audit store is down | Medium | Medium | Deliberate trade-off (ADR-024); store health alert; non-sensitive traffic unaffected |
 | R13 | Restricted-class data uploaded by mistake and sent to a hosted provider | Medium | High | Procedural control only in v1 (4.3); upload acknowledgement; local-model adapter Planned |
 | R14 | Spring Boot 3.5.x line is at or past the end of public releases (last release on Maven Central dated 2026-06-25), so the edge uses 4.1.x | Medium | Medium | Decided (D-1): Spring Boot 4.1.x with Spring Cloud 2025.1.x, confirmed by a dependency spike in P3b (ADR-021) |
-| R15 | The web fallback opens a new attack surface (SSRF, prompt injection from fetched pages, allowlist bypass through redirects) | Medium | High | Optional and Planned; allowlist-only, address checks after DNS resolution, redirect re-checks, size and time caps, content treated as untrusted ([ADR-030](adr/ADR-030-allowlisted-web-fallback.md), Threat Model) |
+| R15 | The web fallback opens a new attack surface (SSRF, prompt injection from fetched pages, allowlist bypass through redirects) | Medium | High | Built, off by default; allowlist-only, address checks after DNS resolution, connection pinned to the checked address, redirect re-checks, size and time caps, content treated as untrusted ([ADR-030](adr/ADR-030-allowlisted-web-fallback.md), Threat Model) |
 | R16 | The owner's private learning material (possibly copyrighted) is committed or published by mistake | Low | High | Corpus lives in a git-ignored `data/` folder; secret and file-list review before every commit; public demos use a synthetic or openly licensed corpus |
 
 ## 10. Dependencies

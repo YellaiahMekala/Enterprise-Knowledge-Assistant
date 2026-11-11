@@ -1,8 +1,8 @@
-# ADR-030: Allowlisted web fallback for official documentation (optional, Planned)
+# ADR-030: Allowlisted web fallback for official documentation (optional, built, off by default)
 
 | | |
 |---|---|
-| Status | Proposed |
+| Status | Accepted, implemented 2026-11-11 |
 | Date | 2026-10-31 |
 | Decision owner | Maintainer |
 | Review trigger | The static corpus answers enough questions that the fallback is unused, or a threat-model review finds the residual risk unacceptable. |
@@ -29,3 +29,10 @@ The owner wants questions the static corpus cannot answer to be answered from of
 
 ## Consequences
 New threats are recorded (SSRF, redirect escape, injection through pages, allowlist bypass, cost and abuse) with a test per control. The BRD marks FR-37 Planned (optional). If time is short, this phase is the first to be cut.
+
+## Implementation (2026-11-11)
+- **Fetcher** (`adapters/web_fetch.py`): https only, no user info, exact host match; every address the name resolves to must be public (`is_global`, IPv4-mapped IPv6 unwrapped, multicast refused), and the request goes to the checked address with the host name kept for SNI and certificate checks, so DNS cannot change the target between check and connect. Proxies from the environment are ignored. Up to 3 redirects, each checked like the first URL; HTML or plain text only; size cap (`EKA_WEB_MAX_PAGE_KB`, 2 MB) and one total time limit (10 s). Refusals have fixed reason codes that are logged with the host only.
+- **Storage:** the page becomes Markdown (scripts, styles, navigation and forms dropped; headings, lists and code blocks kept) with a header naming the source and fetch time, uploaded through the normal upload path as the asking user's document. Migration 0003 adds `source_url` and `fetched_at` with a check that both are set together and the URL is https. The API role cannot write chunks (ADR-012), so the worker indexes the page like any upload; the request waits up to 30 s for it, then searches only the new pages. A newer copy replaces an older one once it is ready.
+- **When:** only when the best cosine is below the refusal gate or nothing was found, and only for entry URLs with no copy younger than `EKA_WEB_REFRESH_HOURS`. A fresh copy is part of normal search already, so it is not fetched again.
+- **Prompt and citations:** web passages are sent with their URL and `origin="web page"`, inside the same data tags as documents; citations carry `kind: "web"`, `source_url` and `fetched_at`, and the answer carries `web_fallback: true`.
+- **Not done:** a search engine or crawling (v1 uses entry URLs only), a live model run, and separate fallback-rate reporting in the evaluation (the answer field is there; the harness does not count it yet).

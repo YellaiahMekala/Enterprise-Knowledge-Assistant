@@ -98,6 +98,8 @@ docker compose $P down               # stop; volumes (data) are kept
 docker compose $P down --rmi local   # also remove the project-built images
 ```
 
+**Keycloak realm changes.** Keycloak imports `keycloak/realm-eka.json` only when its container is created. After a realm change (for example the refresh token rotation added on 2026-11-11), recreate it once: `docker compose --profile idp up -d --force-recreate keycloak`. It keeps no other data. The test users `alice` and `boss` have fixed ids in the realm, so a recreated Keycloak gives them the same subject and they still see their documents behind the edge.
+
 **Do not** use `down -v` unless you want to delete the data volumes:
 
 | Volume | What's in it |
