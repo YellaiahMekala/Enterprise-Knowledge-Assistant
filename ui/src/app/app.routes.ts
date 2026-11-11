@@ -3,7 +3,12 @@ import { signedInGuard } from './auth';
 
 export const routes: Routes = [
   { path: 'login', loadComponent: () => import('./login').then((m) => m.Login) },
-  { path: 'chat', canActivate: [signedInGuard], loadComponent: () => import('./chat').then((m) => m.Chat) },
+  { path: 'callback', loadComponent: () => import('./callback').then((m) => m.Callback) },
+  {
+    path: 'chat',
+    canActivate: [signedInGuard],
+    loadComponent: () => import('./chat').then((m) => m.Chat),
+  },
   {
     path: 'documents',
     canActivate: [signedInGuard],

@@ -2,6 +2,8 @@ import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ApiService } from './api.service';
+import { AUTH_CONFIG } from './auth-config';
+import { OidcClient } from './oidc';
 import { SessionService } from './session.service';
 
 @Component({
@@ -10,11 +12,26 @@ import { SessionService } from './session.service';
   template: `
     <section class="card narrow">
       <h1>Sign in</h1>
-      <p class="muted">Paste your API key. It is kept for this browser tab only.</p>
-      <form (ngSubmit)="submit()">
-        <input type="password" name="key" [ngModel]="key()" (ngModelChange)="key.set($event)" placeholder="API key" autocomplete="off" required />
-        <button type="submit" [disabled]="busy() || !key()">Continue</button>
-      </form>
+      @if (sso) {
+        <p class="muted">Sign in with your organisation account.</p>
+        <button type="button" (click)="signInWithSso()" [disabled]="busy()">
+          Sign in with single sign-on
+        </button>
+      } @else {
+        <p class="muted">Paste your API key. It is kept for this browser tab only.</p>
+        <form (ngSubmit)="submit()">
+          <input
+            type="password"
+            name="key"
+            [ngModel]="key()"
+            (ngModelChange)="key.set($event)"
+            placeholder="API key"
+            autocomplete="off"
+            required
+          />
+          <button type="submit" [disabled]="busy() || !key()">Continue</button>
+        </form>
+      }
       @if (error()) {
         <p class="error" role="alert">{{ error() }}</p>
       }
@@ -25,10 +42,23 @@ export class Login {
   private readonly api = inject(ApiService);
   private readonly session = inject(SessionService);
   private readonly router = inject(Router);
+  private readonly oidc = inject(OidcClient);
 
+  protected readonly sso = AUTH_CONFIG.mode === 'oidc';
   protected readonly key = signal('');
   protected readonly busy = signal(false);
   protected readonly error = signal('');
+
+  protected async signInWithSso(): Promise<void> {
+    this.busy.set(true);
+    this.error.set('');
+    try {
+      location.assign(await this.oidc.authorizeUrl());
+    } catch (e) {
+      this.busy.set(false);
+      this.error.set(e instanceof Error ? e.message : 'Could not start sign-in.');
+    }
+  }
 
   protected submit(): void {
     this.busy.set(true);
@@ -39,7 +69,9 @@ export class Login {
       error: (e) => {
         this.busy.set(false);
         // The interceptor already cleared the key on a 401.
-        this.error.set(e.status === 401 ? 'That key was not accepted.' : 'Could not reach the service.');
+        this.error.set(
+          e.status === 401 ? 'That key was not accepted.' : 'Could not reach the service.',
+        );
         if (e.status !== 401) this.session.signOut();
       },
     });

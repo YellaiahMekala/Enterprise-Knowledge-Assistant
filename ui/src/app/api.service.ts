@@ -33,7 +33,9 @@ export class ApiService {
   }
 
   documents(): Observable<{ items: DocumentItem[] }> {
-    return this.http.get<{ items: DocumentItem[] }>('/api/v1/documents', { params: { limit: 100 } });
+    return this.http.get<{ items: DocumentItem[] }>('/api/v1/documents', {
+      params: { limit: 100 },
+    });
   }
 
   upload(file: File): Observable<DocumentItem> {
@@ -66,7 +68,7 @@ export class ApiService {
       headers: {
         'Content-Type': 'application/json',
         Accept: 'text/event-stream',
-        'X-API-Key': this.session.apiKey() ?? '',
+        ...this.session.authHeaders(),
       },
       body: JSON.stringify({ ...request, stream: true }),
     });

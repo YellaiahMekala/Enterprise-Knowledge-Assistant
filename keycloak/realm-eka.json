@@ -17,7 +17,10 @@
       "directAccessGrantsEnabled": true,
       "redirectUris": ["http://localhost:4200/*"],
       "webOrigins": ["http://localhost:4200"],
-      "attributes": { "pkce.code.challenge.method": "S256" },
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:4200/*"
+      },
       "protocolMappers": [
         {
           "name": "audience-eka-api",

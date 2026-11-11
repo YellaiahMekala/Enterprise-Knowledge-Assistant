@@ -7,8 +7,8 @@ import { SessionService } from './session.service';
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const session = inject(SessionService);
   const router = inject(Router);
-  const key = session.apiKey();
-  const authed = key ? req.clone({ setHeaders: { 'X-API-Key': key } }) : req;
+  const headers = session.authHeaders();
+  const authed = Object.keys(headers).length ? req.clone({ setHeaders: headers }) : req;
   return next(authed).pipe(
     tap({
       error: (e) => {

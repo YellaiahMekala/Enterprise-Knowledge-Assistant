@@ -48,6 +48,17 @@
               "optimization": false,
               "extractLicenses": false,
               "sourceMap": true
+            },
+            "sso": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true,
+              "fileReplacements": [
+                {
+                  "replace": "src/app/auth-config.ts",
+                  "with": "src/app/auth-config.sso.ts"
+                }
+              ]
             }
           },
           "defaultConfiguration": "production"
@@ -60,6 +71,10 @@
             },
             "development": {
               "buildTarget": "ui:build:development"
+            },
+            "sso": {
+              "buildTarget": "ui:build:sso",
+              "proxyConfig": "proxy.edge.conf.json"
             }
           },
           "defaultConfiguration": "development",
