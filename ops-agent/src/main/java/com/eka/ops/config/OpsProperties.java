@@ -12,6 +12,7 @@ public record OpsProperties(
         String prometheusUrl,
         String coreUrl,
         String edgeManagementUrl,
+        String lokiUrl,
         Path runbookFile,
         @DefaultValue("5") int maxToolCalls,
         @DefaultValue("10s") Duration toolTimeout,

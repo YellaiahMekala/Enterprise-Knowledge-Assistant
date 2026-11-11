@@ -23,6 +23,7 @@ public class OpsTools {
     private final String prometheusUrl;
     private final String coreUrl;
     private final String edgeManagementUrl;
+    private final LogSearch logs;
     private final int budget;
     private final AtomicInteger used = new AtomicInteger();
 
@@ -32,12 +33,14 @@ public class OpsTools {
             String prometheusUrl,
             String coreUrl,
             String edgeManagementUrl,
+            LogSearch logs,
             int budget) {
         this.http = http;
         this.runbooks = runbooks;
         this.prometheusUrl = prometheusUrl;
         this.coreUrl = coreUrl;
         this.edgeManagementUrl = edgeManagementUrl;
+        this.logs = logs;
         this.budget = budget;
     }
 
@@ -63,6 +66,18 @@ public class OpsTools {
     public String serviceHealth() {
         return run("serviceHealth", "", () -> "core /health/ready: " + http.get(coreUrl, "/health/ready")
                 + "\nedge /actuator/health: " + http.get(edgeManagementUrl, "/actuator/health"));
+    }
+
+    @Tool("Searches the newest container log lines in Loki (at most 20, credentials masked). "
+            + "Services: api, worker, core-behind-edge, edge, db, ops-agent, prometheus, alertmanager. "
+            + "Use it to find errors or tracebacks behind an alert, for example text ERROR in core-behind-edge.")
+    public String searchLogs(
+            @P("compose service name, for example core-behind-edge") String service,
+            @P("plain text the line must contain (case-sensitive), may be empty; at most 100 characters") String text,
+            @P("how many minutes back to look, 1 to 60") int minutes) {
+        return run("searchLogs", service + " | " + text + " | " + minutes + "m", () -> logs == null
+                ? "log search is not configured (no log store URL)"
+                : logs.search(service, text, minutes));
     }
 
     @Tool("Returns the runbook section for an alert, for example EkaHighErrorRate, with the steps to follow.")

@@ -15,6 +15,13 @@ public class ReadOnlyHttp {
 
     private static final int MAX_BODY_CHARS = 4_000;
 
+    /** Status -1 means the request did not complete; the body then says why. */
+    public record Reply(int status, String body) {
+        boolean ok() {
+            return status == 200;
+        }
+    }
+
     private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
     private final Duration timeout;
 
@@ -24,22 +31,31 @@ public class ReadOnlyHttp {
 
     /** Status and the start of the body; failures come back as text the model can read. */
     public String get(String baseUrl, String pathAndQuery) {
+        Reply reply = fetch(baseUrl, pathAndQuery);
+        if (reply.status() < 0) {
+            return reply.body();
+        }
+        String body = reply.body();
+        if (body.length() > MAX_BODY_CHARS) {
+            body = body.substring(0, MAX_BODY_CHARS) + "...[truncated]";
+        }
+        return "HTTP " + reply.status() + " " + body;
+    }
+
+    /** The whole body, for tools that parse it and return a short summary to the model. */
+    Reply fetch(String baseUrl, String pathAndQuery) {
         try {
             HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + pathAndQuery))
                     .timeout(timeout)
                     .GET()
                     .build();
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-            String body = response.body();
-            if (body.length() > MAX_BODY_CHARS) {
-                body = body.substring(0, MAX_BODY_CHARS) + "...[truncated]";
-            }
-            return "HTTP " + response.statusCode() + " " + body;
+            return new Reply(response.statusCode(), response.body());
         } catch (IOException e) {
-            return "unreachable: " + e.getClass().getSimpleName();
+            return new Reply(-1, "unreachable: " + e.getClass().getSimpleName());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            return "interrupted";
+            return new Reply(-1, "interrupted");
         }
     }
 }

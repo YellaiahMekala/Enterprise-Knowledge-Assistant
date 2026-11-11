@@ -2,6 +2,7 @@ package com.eka.ops.triage;
 
 import com.eka.ops.alert.AlertmanagerPayload.Alert;
 import com.eka.ops.config.OpsProperties;
+import com.eka.ops.tools.LogSearch;
 import com.eka.ops.tools.OpsTools;
 import com.eka.ops.tools.ReadOnlyHttp;
 import com.eka.ops.tools.RunbookReader;
@@ -37,12 +38,14 @@ public class TriageService {
         if (model == null) {
             return fallback(alerts, 0, "No model is configured, so this report comes from the runbook only.");
         }
+        String lokiUrl = properties.lokiUrl();
         OpsTools tools = new OpsTools(
                 http,
                 runbooks,
                 properties.prometheusUrl(),
                 properties.coreUrl(),
                 properties.edgeManagementUrl(),
+                lokiUrl == null || lokiUrl.isBlank() ? null : new LogSearch(http, lokiUrl),
                 properties.maxToolCalls());
         try {
             TriageAgent agent = AiServices.builder(TriageAgent.class)

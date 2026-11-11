@@ -26,6 +26,8 @@ ops:
   prometheus-url: ${OPS_AGENT_PROMETHEUS_URL:http://prometheus:9090}
   core-url: ${OPS_AGENT_CORE_URL:http://api:8000}
   edge-management-url: ${OPS_AGENT_EDGE_MANAGEMENT_URL:http://edge:8081}
+  # Empty: the searchLogs tool answers that no log store is configured.
+  loki-url: ${OPS_AGENT_LOKI_URL:}
   runbook-file: ${OPS_AGENT_RUNBOOK_FILE:/app/runbooks.md}
   max-tool-calls: ${OPS_AGENT_MAX_TOOL_CALLS:5}
   mail:

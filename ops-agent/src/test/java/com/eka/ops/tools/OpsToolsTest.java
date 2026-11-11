@@ -45,6 +45,7 @@ class OpsToolsTest {
                 base,
                 base,
                 base,
+                new LogSearch(new ReadOnlyHttp(Duration.ofSeconds(2)), base),
                 budget);
     }
 
@@ -97,5 +98,31 @@ class OpsToolsTest {
         assertThat(third).contains("budget used up");
         assertThat(requests).hasSize(2);
         assertThat(tools.callsUsed()).isEqualTo(3);
+    }
+
+    @Test
+    void logSearchGoesToTheLogStoreAndCountsAgainstTheBudget() {
+        OpsTools tools = tools(5);
+
+        tools.searchLogs("api", "ERROR", 10);
+
+        assertThat(requests).hasSize(1);
+        assertThat(requests.get(0)).startsWith("GET /loki/api/v1/query_range?query=");
+        assertThat(tools.callsUsed()).isEqualTo(1);
+    }
+
+    @Test
+    void withoutALogStoreTheToolSaysSoAndCallsNothing() {
+        OpsTools tools = new OpsTools(
+                new ReadOnlyHttp(Duration.ofSeconds(2)),
+                new RunbookReader(Path.of("../docs/runbooks.md")),
+                base,
+                base,
+                base,
+                null,
+                5);
+
+        assertThat(tools.searchLogs("api", "ERROR", 10)).contains("not configured");
+        assertThat(requests).isEmpty();
     }
 }

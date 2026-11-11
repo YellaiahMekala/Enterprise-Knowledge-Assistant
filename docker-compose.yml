@@ -152,6 +152,35 @@ services:
     ports:
       - "127.0.0.1:9093:9093"
 
+  # Logs: Alloy reads this project's container logs from the Docker socket and pushes them to
+  # Loki, labelled by compose service. Read by Grafana and by the ops agent's searchLogs tool.
+  # The socket gives Alloy full control of Docker on this machine (":ro" does not limit the API),
+  # which is acceptable for a local stack only; on AWS, logs go to CloudWatch through the task's
+  # log driver instead.
+  loki:
+    mem_limit: 512m
+    profiles: [monitoring]
+    image: grafana/loki:3.5.3
+    command: ["-config.file=/etc/loki/loki.yml"]
+    volumes:
+      - ./monitoring/loki.yml:/etc/loki/loki.yml:ro
+      - eka-loki:/loki
+    ports:
+      - "127.0.0.1:3100:3100"
+
+  alloy:
+    mem_limit: 256m
+    profiles: [monitoring]
+    image: grafana/alloy:v1.10.2
+    command: ["run", "--server.http.listen-addr=0.0.0.0:12345", "--storage.path=/var/lib/alloy/data", "/etc/alloy/config.alloy"]
+    depends_on:
+      - loki
+    environment:
+      COMPOSE_PROJECT: ${COMPOSE_PROJECT_NAME:-enterprise-knowledge-assistant}
+    volumes:
+      - ./monitoring/alloy.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
   # Agent profile: `docker compose --profile monitoring --profile agent up -d`.
   # Receives Alertmanager webhooks, investigates with read-only tools, emails a report.
   ops-agent:
@@ -164,6 +193,7 @@ services:
       OPS_AGENT_PROMETHEUS_URL: http://prometheus:9090
       OPS_AGENT_CORE_URL: http://core-behind-edge:8000
       OPS_AGENT_EDGE_MANAGEMENT_URL: http://edge:8081
+      OPS_AGENT_LOKI_URL: http://loki:3100
       OPS_AGENT_RUNBOOK_FILE: /app/runbooks.md
       EKA_ALERT_EMAIL_TO: ${EKA_ALERT_EMAIL_TO:-}
       EKA_ALERT_EMAIL_FROM: ${EKA_ALERT_EMAIL_FROM:-}
@@ -206,3 +236,4 @@ volumes:
   eka-pgdata:
   eka-files:
   eka-models:
+  eka-loki:

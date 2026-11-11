@@ -45,7 +45,7 @@ class TriageServiceTest {
         server.start();
         String base = "http://127.0.0.1:" + server.getAddress().getPort();
         properties = new OpsProperties(
-                "token", base, base, base, Path.of("../docs/runbooks.md"), 3, Duration.ofSeconds(2), null, null);
+                "token", base, base, base, null, Path.of("../docs/runbooks.md"), 3, Duration.ofSeconds(2), null, null);
     }
 
     @AfterEach
@@ -138,5 +138,25 @@ class TriageServiceTest {
         TriageReport report = service(new ScriptedModel()).triage(unknown);
 
         assertThat(report.triage().nextSteps()).containsExactly("Check docs/runbooks.md and the service logs.");
+    }
+
+    @Test
+    void theAgentCanSearchLogsWhenALogStoreIsConfigured() {
+        String base = properties.prometheusUrl();
+        properties = new OpsProperties(
+                "token", base, base, base, base, Path.of("../docs/runbooks.md"), 3, Duration.ofSeconds(2), null, null);
+        ScriptedModel model = new ScriptedModel()
+                .then(ScriptedModel.callTool(
+                        "1", "searchLogs", "{\"service\":\"core-behind-edge\",\"text\":\"ERROR\",\"minutes\":15}"))
+                .then(ScriptedModel.answer(ANSWER));
+
+        TriageReport report = service(model).triage(highErrorRate());
+
+        assertThat(model.requests.get(0).toolSpecifications())
+                .extracting(spec -> spec.name())
+                .contains("searchLogs", "promQuery", "serviceHealth", "runbook");
+        assertThat(served).containsExactly("/loki/api/v1/query_range");
+        assertThat(model.toolResultsSeen()).anyMatch(text -> text.startsWith("no log lines for {service=\"core-behind-edge\"}"));
+        assertThat(report.toolCalls()).isEqualTo(1);
     }
 }
