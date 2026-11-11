@@ -101,6 +101,9 @@ class Settings(BaseSettings):
     chat_base_url: str = "https://api.openai.com/v1"
     chat_model: str | None = None  # required for openai (model name) and bedrock (model id)
     bedrock_region: str | None = None  # bedrock uses the AWS credential chain, no key here
+    # Empty for real AWS. Set only to point the Bedrock adapter at a local stand-in
+    # (python -m eka.tools.bedrock_stub) so the full boto3 path can be tested without an account.
+    bedrock_endpoint_url: str | None = None
     chat_api_key: SecretStr | None = None  # required when chat_provider="openai"
     chat_timeout_seconds: float = Field(default=60.0, gt=0)
     chat_retries: int = Field(default=2, ge=0, le=5)
@@ -136,6 +139,7 @@ class Settings(BaseSettings):
         "s3_secret_access_key",
         "reranker_model",
         "bedrock_region",
+        "bedrock_endpoint_url",
         mode="before",
     )
     @classmethod

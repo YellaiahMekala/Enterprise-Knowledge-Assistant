@@ -30,6 +30,7 @@ class BedrockChat:
         *,
         model_id: str,
         region: str | None = None,
+        endpoint_url: str | None = None,
         timeout_seconds: float = 60.0,
         retries: int = 2,
         client: Any = None,
@@ -38,6 +39,7 @@ class BedrockChat:
         self._client = client or boto3.client(
             "bedrock-runtime",
             region_name=region,
+            endpoint_url=endpoint_url,
             config=Config(
                 read_timeout=timeout_seconds,
                 connect_timeout=min(5.0, timeout_seconds),

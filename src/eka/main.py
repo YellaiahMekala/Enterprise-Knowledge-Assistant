@@ -121,6 +121,7 @@ def _chat_model(settings: Settings, given: ChatModel | None) -> ChatModel:
         return BedrockChat(
             model_id=settings.chat_model,
             region=settings.bedrock_region,
+            endpoint_url=settings.bedrock_endpoint_url,
             timeout_seconds=settings.chat_timeout_seconds,
             retries=settings.chat_retries,
         )
