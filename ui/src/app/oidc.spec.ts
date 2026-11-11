@@ -134,6 +134,32 @@ describe('OidcClient', () => {
     await expect(client.complete(new URLSearchParams({ code: 'c1', state }))).rejects.toThrow();
   });
 
+  it('swaps a refresh token for new tokens, keeping the rotated refresh token', async () => {
+    let sent: URLSearchParams | undefined;
+    const { client } = setup((body) => {
+      sent = body;
+      return json({ access_token: 'a2', refresh_token: 'r2', expires_in: 300 });
+    });
+
+    const tokens = await client.refresh('r1');
+
+    expect(sent?.get('grant_type')).toBe('refresh_token');
+    expect(sent?.get('refresh_token')).toBe('r1');
+    expect(sent?.get('client_id')).toBe('eka-ui');
+    expect(tokens).toEqual({
+      accessToken: 'a2',
+      idToken: null,
+      expiresAt: 1_000_000 + 300_000 - 30_000,
+      refreshToken: 'r2',
+    });
+  });
+
+  it('reports an ended session when the refresh is refused', async () => {
+    const { client } = setup(() => json({ error: 'invalid_grant' }, 400));
+
+    await expect(client.refresh('old')).rejects.toThrow('session has ended');
+  });
+
   it('refuses an id token with another nonce', async () => {
     const { client } = setup(() => json({ access_token: 'x', id_token: jwt({ nonce: 'other' }) }));
     const { state } = await startedSignIn(client);

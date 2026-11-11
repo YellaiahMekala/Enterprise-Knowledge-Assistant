@@ -4,6 +4,10 @@
   "sslRequired": "none",
   "registrationAllowed": false,
   "accessTokenLifespan": 900,
+  "revokeRefreshToken": true,
+  "refreshTokenMaxReuse": 0,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 28800,
   "roles": {
     "realm": [{ "name": "eka-admin", "description": "Can read the admin endpoints" }]
   },
@@ -49,6 +53,7 @@
   ],
   "users": [
     {
+      "id": "8a5f1d2e-0c3b-4f6a-9d7e-2b1c4a6e8f01",
       "username": "alice",
       "enabled": true,
       "email": "alice@example.test",
@@ -58,6 +63,7 @@
       "credentials": [{ "type": "password", "value": "${KC_ALICE_PASSWORD}", "temporary": false }]
     },
     {
+      "id": "8a5f1d2e-0c3b-4f6a-9d7e-2b1c4a6e8f02",
       "username": "boss",
       "enabled": true,
       "email": "boss@example.test",

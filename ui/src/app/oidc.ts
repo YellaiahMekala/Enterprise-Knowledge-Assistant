@@ -2,7 +2,9 @@
  * OpenID Connect sign-in for a browser app: authorization code flow with PKCE (RFC 7636), no
  * client secret and no library. The verifier, state and nonce live in sessionStorage only for the
  * round trip to the identity provider. Tokens are kept in sessionStorage by SessionService, so
- * they end with the tab; there is no refresh token handling, the user signs in again after expiry.
+ * they end with the tab. The refresh token is used once, shortly before the access token expires;
+ * the realm rotates it on every use, so a copied old one is worthless. When the identity
+ * provider session ends (idle or maximum lifetime) the refresh fails and the user signs in again.
  */
 import { AuthConfig } from './auth-mode';
 
@@ -17,6 +19,7 @@ export interface TokenSet {
   idToken: string | null;
   /** Epoch milliseconds, 30 s before the real expiry so a request does not race it. */
   expiresAt: number;
+  refreshToken: string | null;
 }
 
 interface Pending {
@@ -62,6 +65,7 @@ export function tokenSet(body: Record<string, unknown>, now: number): TokenSet {
     accessToken: body['access_token'],
     idToken: typeof body['id_token'] === 'string' ? body['id_token'] : null,
     expiresAt: now + expiresIn * 1000 - EXPIRY_MARGIN_MS,
+    refreshToken: typeof body['refresh_token'] === 'string' ? body['refresh_token'] : null,
   };
 }
 
@@ -144,6 +148,22 @@ export class OidcClient {
       throw new Error('The sign-in response failed a security check. Please sign in again.');
     }
     return tokens;
+  }
+
+  /** New tokens for a refresh token. Throws when the identity provider session is over. */
+  async refresh(refreshToken: string): Promise<TokenSet> {
+    const endpoints = await this.discover();
+    const response = await this.http(endpoints.token_endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+        client_id: this.config.clientId ?? '',
+      }),
+    });
+    if (!response.ok) throw new Error('Your session has ended. Please sign in again.');
+    return tokenSet(await response.json(), this.now());
   }
 
   /** Where to send the browser to end the session at the identity provider, if it supports it. */

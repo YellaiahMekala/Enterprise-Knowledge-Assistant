@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ChatRequest, Citation, Conversation, DocumentItem, Message, Problem } from './models';
 import { SessionService } from './session.service';
+import { OidcClient } from './oidc';
 import { SseEvent, parseSse } from './sse';
 
 export class ApiError extends Error {
@@ -27,6 +28,7 @@ export interface ConversationDetail extends Conversation {
 export class ApiService {
   private readonly http = inject(HttpClient);
   private readonly session = inject(SessionService);
+  private readonly oidc = inject(OidcClient);
 
   me() {
     return this.http.get<{ user_id: string; role: string }>('/api/v1/me');
@@ -62,6 +64,7 @@ export class ApiService {
 
   // HttpClient cannot read a response body as it arrives, so the streamed chat uses fetch.
   async *chat(request: ChatRequest, signal: AbortSignal): AsyncGenerator<SseEvent> {
+    await this.session.fresh((token) => this.oidc.refresh(token));
     const response = await fetch('/api/v1/chat', {
       method: 'POST',
       signal,

@@ -5,7 +5,15 @@ const KEY = 'eka.session';
 
 type Credential =
   | { kind: 'api_key'; key: string }
-  | { kind: 'bearer'; accessToken: string; idToken: string | null; expiresAt: number };
+  | {
+      kind: 'bearer';
+      accessToken: string;
+      idToken: string | null;
+      expiresAt: number;
+      refreshToken?: string | null;
+    };
+
+export type Renew = (refreshToken: string) => Promise<TokenSet>;
 
 function load(): Credential | null {
   try {
@@ -19,10 +27,39 @@ function load(): Credential | null {
 @Injectable({ providedIn: 'root' })
 export class SessionService {
   private readonly credential = signal<Credential | null>(load());
+  private renewing: Promise<void> | null = null;
 
   signedIn(): boolean {
     const c = this.credential();
-    return c !== null && (c.kind === 'api_key' || c.expiresAt > Date.now());
+    if (c === null) return false;
+    return c.kind === 'api_key' || c.expiresAt > Date.now() || !!c.refreshToken;
+  }
+
+  /**
+   * Swaps an expired access token for a new one before a request. Concurrent callers share one
+   * renewal, because the refresh token is single-use. A failed renewal signs out, so the request
+   * goes without credentials and its 401 sends the user to the sign-in page.
+   */
+  fresh(renew: Renew): Promise<void> {
+    const c = this.credential();
+    if (c?.kind !== 'bearer' || c.expiresAt > Date.now()) return Promise.resolve();
+    if (!c.refreshToken) {
+      this.signOut();
+      return Promise.resolve();
+    }
+    this.renewing ??= renew(c.refreshToken)
+      .then((t) =>
+        this.store({
+          kind: 'bearer',
+          accessToken: t.accessToken,
+          idToken: t.idToken ?? c.idToken,
+          expiresAt: t.expiresAt,
+          refreshToken: t.refreshToken,
+        }),
+      )
+      .catch(() => this.signOut())
+      .finally(() => (this.renewing = null));
+    return this.renewing;
   }
 
   /** Headers for a call to the API: X-API-Key for the core, a bearer token for the edge. */

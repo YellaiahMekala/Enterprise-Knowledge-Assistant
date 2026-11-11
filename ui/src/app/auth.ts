@@ -1,15 +1,19 @@
 import { HttpInterceptorFn } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { CanActivateFn, Router } from '@angular/router';
-import { tap } from 'rxjs';
+import { from, switchMap, tap } from 'rxjs';
+import { OidcClient } from './oidc';
 import { SessionService } from './session.service';
 
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const session = inject(SessionService);
   const router = inject(Router);
-  const headers = session.authHeaders();
-  const authed = Object.keys(headers).length ? req.clone({ setHeaders: headers }) : req;
-  return next(authed).pipe(
+  const oidc = inject(OidcClient);
+  return from(session.fresh((token) => oidc.refresh(token))).pipe(
+    switchMap(() => {
+      const headers = session.authHeaders();
+      return next(Object.keys(headers).length ? req.clone({ setHeaders: headers }) : req);
+    }),
     tap({
       error: (e) => {
         if (e.status === 401) {
