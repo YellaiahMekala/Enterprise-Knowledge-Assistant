@@ -1,59 +1,38 @@
-# Ui
+# EKA web UI
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 22.2.6.
+Angular 22 app for the Enterprise Knowledge Assistant: document upload and status, chat with streamed
+answers and citations, conversation list.
 
-## Development server
+## Sign-in modes
 
-To start a local development server, run:
+How the UI signs in is chosen when it is built or served (`src/app/auth-config.ts`, replaced by
+`auth-config.sso.ts` in the `sso` configuration).
 
-```bash
-ng serve
-```
+| Mode | Command | Sends | To |
+|---|---|---|---|
+| API key (default) | `npm start` | `X-API-Key` | the core on :8000 (`proxy.conf.json`) |
+| Single sign-on | `npm run start:sso` | `Authorization: Bearer <access token>` | the edge on :8080 (`proxy.edge.conf.json`) |
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+Single sign-on uses the authorization code flow with PKCE against Keycloak, without a client secret
+or a library (`src/app/oidc.ts`). It checks the `state` and the id token's `nonce`, uses each PKCE
+verifier once, and on sign-out also ends the Keycloak session. Tokens stay in `sessionStorage` for
+the tab and are not refreshed: after 15 minutes you sign in again.
 
-## Code scaffolding
+Before `npm run start:sso`:
 
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+1. Start the edge and Keycloak from the repository root:
+   `docker compose --profile edge --profile idp up -d --build`.
+2. Add `127.0.0.1 keycloak` to the hosts file. Keycloak always issues tokens as
+   `http://keycloak:8180`, which is the issuer the edge checks.
+3. Sign in as `alice` or `boss` with the passwords from the root `.env`.
 
-```bash
-ng generate component component-name
-```
-
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
-
-```bash
-ng generate --help
-```
-
-## Building
-
-To build the project run:
+## Commands
 
 ```bash
-ng build
+npm ci
+npm start                     # http://localhost:4200, API key
+npm run start:sso             # http://localhost:4200, single sign-on
+npm test                      # unit tests (Vitest), 26
+npx ng build                  # default build into dist/
+npx ng build --configuration sso
 ```
-
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
-
-## Running unit tests
-
-To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
-
-```bash
-ng test
-```
-
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
-
-```bash
-ng e2e
-```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.

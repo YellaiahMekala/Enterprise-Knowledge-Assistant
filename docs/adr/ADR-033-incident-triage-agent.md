@@ -14,7 +14,7 @@ Alerts say that something is wrong, not why. The runbooks list what a person che
 ## Decision
 A separate Java 21 Spring Boot service, `ops-agent`, built on LangChain4j. Alertmanager posts each alert group to it; it investigates and emails a plain-text report.
 
-- **Read-only tools only:** `promQuery` (a PromQL instant query), `serviceHealth` (GET on the core's readiness and the edge's health), `runbook` (a section of `docs/runbooks.md`). The base URLs are fixed at start-up and only GET is possible, so the model chooses a query or a path but never a host or a method.
+- **Read-only tools only:** `promQuery` (a PromQL instant query), `serviceHealth` (GET on the core's readiness and the edge's health), `runbook` (a section of `docs/runbooks.md`), and since 2026-11-11 `searchLogs` (recent container log lines from Loki, ADR-035). The base URLs are fixed at start-up and only GET is possible, so the model chooses a query or a path but never a host or a method.
 - **Guardrails:** a PromQL check (length, plain characters, only this system's metric families), a budget of 5 tool calls per alert group (further calls are refused without being sent), a 10 s timeout per call, temperature 0, and a system prompt that says tool output is data, not instructions.
 - **Audit:** every tool call is logged on `eka.ops.audit` with its arguments and the size of the answer.
 - **Always a report:** with no model key, or when the model call fails, the report is built from the runbook steps, and it says so.
@@ -32,5 +32,5 @@ A separate Java 21 Spring Boot service, `ops-agent`, built on LangChain4j. Alert
 ## Consequences
 - Alert delivery depends on the agent being up. Second path (added 2026-11-11): Prometheus scrapes Alertmanager, `EkaAlertDeliveryFailing` fires on any failed webhook attempt in 10 minutes, and Alertmanager emails that one alert directly, never through the agent. Drill: with the agent stopped, the email reached the local mail catcher 70 s after Prometheus started. Not covered: an agent that accepts the alert and then fails to send its own email.
 - The cause the model states can be wrong. The email says so, lists the evidence it used and marks runbook-only reports as such.
-- There is no log search tool because the project has no log store. Adding one (for example Loki) would be a new decision.
+- Log search was added on 2026-11-11 as its own decision (ADR-035): Loki and Alloy in the monitoring profile, and a `searchLogs` tool that builds the query itself and masks credentials.
 - Cost: a few thousand tokens per alert group with a small model. Not yet measured with a live model.

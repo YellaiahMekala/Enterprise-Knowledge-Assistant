@@ -22,6 +22,8 @@ docker compose logs --since 15m api worker edge | grep -iE "error|warn" | tail -
 ```
 Every error response carries a `request_id`. Search the logs for it to follow one request across the edge and the core.
 
+With the monitoring profile, the same lines are in Loki for 3 days: Grafana, Explore, data source Loki, query `{service="core-behind-edge"} |= "ERROR"` (services are labelled by their Compose name: `api`, `worker`, `core-behind-edge`, `edge`, `db`, ...). The triage agent runs the same kind of search with its `searchLogs` tool and puts what it found in the alert email.
+
 ## EkaHighErrorRate
 
 **Meaning:** more than 7.2% of core requests returned 5xx for 5 minutes.

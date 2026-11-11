@@ -22,4 +22,4 @@ Angular standalone-component app built to static files and served by nginx. **Am
 | Serve the SPA from FastAPI | Couples release cycles. Rejected. |
 
 ## Consequences
-The UI authenticates through OIDC (ADR-022), not with an API key.
+The UI authenticates through OIDC (ADR-022). Amended 2026-11-11: that is the `sso` build (`npm run start:sso`), which talks to the edge. The default build keeps API-key sign-in so the UI can run against the core alone, without the edge and an identity provider.

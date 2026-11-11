@@ -16,7 +16,7 @@ ADR-011's HMAC identity header was a custom scheme with a shared secret. With a 
 2. Edge → core: the edge mints a short-lived (≤ 60 s) internal JWT signed with an asymmetric key. Claims: `iss`, `aud=eka-core`, `sub` (user id), `role`, `jti` (audit and log correlation only), `iat`, `exp`, request id. The core validates signature via the edge's public key (JWKS endpoint or mounted key), audience, issuer and expiry, and sets `owner_id` from `sub`.
 3. The core is on a private network only; no published port in edge mode. mTLS between the services is a requirement for deployed environments (Proposed profile), not for local Compose.
 4. The core keeps API-key mode (`AUTH_MODE=api_key`) for standalone use, tests, Postman and the evaluation harness. In `AUTH_MODE=gateway` it accepts internal tokens only.
-5. SPA sign-in uses authorization code with PKCE against the identity provider. The development identity provider (candidate: Keycloak; alternative: a minimal test issuer) is chosen and verified in spike S-4 (pulled forward to right after milestone M1).
+5. SPA sign-in uses authorization code with PKCE against the identity provider. The development identity provider (candidate: Keycloak; alternative: a minimal test issuer) is chosen and verified in spike S-4 (pulled forward to right after milestone M1). Built 2026-11-11 against Keycloak: the UI's `sso` build signs in with the authorization code flow and PKCE without a library (`ui/src/app/oidc.ts`), checks state and nonce, uses each verifier once, and sends the access token to the edge. There is no refresh token handling; the user signs in again after the 15-minute token expires.
 
 ## Options considered
 | Option | Assessment (benefit, cost, risk) |

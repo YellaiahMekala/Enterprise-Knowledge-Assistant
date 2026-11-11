@@ -13,6 +13,7 @@
 |---|---|---|
 | 0.1 | 2026-10-31 | First draft: RAG core, Angular UI, Java gateway as design only |
 | 0.2 | 2026-10-31 | After external assessment: Java edge service becomes a delivered slice (FR-60 to FR-67); business outcomes, stakeholders and data classification added; operability, threat model, resilience and release-evidence requirements added (NFR-14 to NFR-18); phases renumbered (edge is P5); decisions moved to `adr/` |
+| 0.4 | 2026-11-11 | Status updates: FR-40 Done (single sign-on in the UI through Keycloak and the edge); NFR-07 adds a log store (Loki); NFR-08 test counts refreshed |
 | 0.3 | 2026-10-31 | After an external review and owner decisions: code and text corpus (FR-36); optional allowlisted web fallback, Planned (FR-37); verified and fast answer modes (FR-38); evaluation challenge set (FR-51); decisions D-1, D-2, D-5 and D-6 recorded; AC-21 to AC-23; risks R15 and R16; R5, R8 and R14 updated |
 
 ---
@@ -162,7 +163,7 @@ Priority: **M** must · **S** should · **C** could. Phase refers to the Impleme
 ### 6.5 Interface
 | ID | Requirement | Pri | Status | Phase |
 |---|---|---|---|---|
-| FR-40 | Angular web UI: sign in with OIDC (authorization code with PKCE) through the edge; upload with live status; document list and delete; chat with streamed answers; clickable citations that show the passage; conversation list | M | Partial: UI built with API-key sign-in, document status, streamed chat, citations and conversations; OIDC sign-in and upload from the UI Planned | P8 |
+| FR-40 | Angular web UI: sign in with OIDC (authorization code with PKCE) through the edge; upload with live status; document list and delete; chat with streamed answers; clickable citations that show the passage; conversation list | M | Done: OIDC sign-in (authorization code with PKCE through Keycloak and the edge, `sso` build; run once in a real browser) or API-key sign-in against the core alone; upload with live status; document list and delete; streamed chat; conversation list. Differences: citations are listed under the answer with their passage rather than opened by a click, and tokens are not refreshed | P8 |
 | FR-41 | Admin view: requests, tokens, latency and refusals by user and day; document counts by status | S | Partial: admin API built; admin view in the UI Planned | P7 (API), P8 (view) |
 
 ### 6.6 Quality and operations (core)
@@ -206,8 +207,8 @@ All numeric targets are **targets, not measurements**. They are verified in P6, 
 | NFR-04 | Ingestion | A 100-page text PDF reaches `ready` in ≤ 2 minutes on 2 vCPU | Planned (target) |
 | NFR-05 | Cost | Bounded prompt: top-k, context-token and output-token caps; per-question token accounting; per-user limits at the edge; embeddings at zero marginal cost | Partial: top-k, context and output caps, per-question usage events and per-user rate limits built; token accounting Planned |
 | NFR-06 | Reliability | Timeouts and bounded retries with backoff on provider calls; interrupted ingestion resumes after restart; failures return typed errors, never partial fabricated answers | Partial: provider timeouts and bounded retries; the worker reclaims stale jobs after a crash; edge timeouts and circuit breaker. Fault injection beyond the edge Planned |
-| NFR-07 | Observability | JSON logs with request and trace ids; Prometheus metrics from edge and core; distributed traces; usage events | Partial: JSON logs with request id, Prometheus metrics from edge and core, Grafana dashboard, usage events; distributed traces Planned |
-| NFR-08 | Testability | Offline test suites for both services; one real-database integration layer; evaluation set in CI; contract tests across the edge-core boundary | Done: core 489 tests (integration on a real PostgreSQL), edge 43, UI 11, evaluation gate and API-contract run in CI |
+| NFR-07 | Observability | JSON logs with request and trace ids; Prometheus metrics from edge and core; distributed traces; usage events | Partial: JSON logs with request id, Prometheus metrics from edge and core, Grafana dashboard, usage events, container logs in Loki (collected by Alloy, searchable in Grafana and by the triage agent); distributed traces Planned |
+| NFR-08 | Testability | Offline test suites for both services; one real-database integration layer; evaluation set in CI; contract tests across the edge-core boundary | Done: core 554 tests (integration on a real PostgreSQL), edge 43, triage agent 55, UI 26, evaluation gate and API-contract run in CI |
 | NFR-09 | Portability | LLM, embedder, reranker and file storage sit behind interfaces so providers are replaceable by configuration | Done: chat model, embedder, reranker and file storage sit behind interfaces; each has at least two adapters or a fake |
 | NFR-10 | Maintainability | Ruff and mypy strict clean; line coverage gate ≥ 85% in CI; Java build with architecture tests | Done: ruff and strict mypy clean; the 85% coverage gate passes in CI; edge architecture tests |
 | NFR-11 | Delivery | Non-root multi-stage images for core, edge and UI; one-command local stack; CI on every push | Partial: non-root multi-stage core and edge images, one-command Compose stack, CI on every push; UI image Planned |

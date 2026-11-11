@@ -19,9 +19,9 @@ Architecture: Angular web UI → Spring Boot edge (Java 21: OIDC token validatio
 
 ## Status
 
-Everything below was run locally between 2026-11-07 and 2026-11-09 against the Docker Compose stack
-(PostgreSQL 17 with pgvector, core, worker, edge, Prometheus, Alertmanager, Grafana, Keycloak, the
-triage agent) on a development laptop. All GitHub Actions jobs pass on `main`: core lint, types and
+Everything below was run locally between 2026-11-07 and 2026-11-11 against the Docker Compose stack
+(PostgreSQL 17 with pgvector, core, worker, edge, Prometheus, Alertmanager, Grafana, Loki, Alloy,
+Keycloak, the triage agent) on a development laptop. All GitHub Actions jobs pass on `main`: core lint, types and
 tests (Python 3.11 and 3.12), integration with the coverage gate, image build, edge, UI, API
 contract, evaluation, monitoring, ops-agent and Terraform validate. The first run of the edge job
 failed on a timing problem in the test fixture (a hung fake core stalled later tests); the fix is in
@@ -31,21 +31,22 @@ the history.
 
 | Area | What exists | How it was checked |
 |---|---|---|
-| Core API (FastAPI) | Typed settings that refuse a half-configured start, problem+json errors with a request id, liveness and readiness probes | 545 tests collected; locally 537 pass, 5 skipped, 3 edge-interop tests need a fresh edge build (coverage last measured at 522 tests: 91.7%, gate 85%) |
+| Core API (FastAPI) | Typed settings that refuse a half-configured start, problem+json errors with a request id, liveness and readiness probes | 554 tests collected. On 2026-11-11 the 484 offline tests ran locally (479 pass, 5 skipped); CI runs all of them, including the integration tests on a real PostgreSQL (coverage last measured at 522 tests: 91.7%, gate 85%) |
 | Authentication | API-key mode (SHA-256 digests, constant-time compare) and gateway mode (ES256 internal token from the edge, key set fetched from the edge) | Unit tests; a token minted by the real edge verifies in the core; behind the edge the core answers 401 to an identity-provider token, an API key and no credential |
 | Isolation | Owner-scoped repositories plus row-level security that fails closed; leakage tests through search | Integration tests; two users through the edge see only their own documents |
 | Ingestion | Upload (PDF, DOCX, CSV, code, text) validated by content, background worker, local BGE-small embeddings | 13 mixed files ingested through the Docker stack |
 | Retrieval | Dense (pgvector HNSW) and full-text candidates fused by reciprocal rank; metadata filters; refusal gate on cosine similarity | Tests; evaluation below |
 | Chat | Cited answers over JSON or server-sent events; verified mode (default) and fast mode; conversation memory; OpenAI-compatible adapter | Run with the fake model only: a cited answer, a `weak_evidence` refusal, both stream modes. No live model was used |
 | Edge (Spring Cloud Gateway, Java 21) | OIDC token validation, credential swap to a 60-second internal token, per-user rate limit, audit log, SSE passthrough with client-disconnect cancel, problem+json for upstream failures, circuit breaker on the core route (fast 503 `circuit-open` while open), Prometheus on a private port | 43 tests (hung-core drill, breaker opens after repeated timeouts and its state is exported, streaming spike); through the real image: bad tokens 401, role mapping, tokens spaced about 100 ms apart, 12 of 45 rapid requests limited |
-| Observability | Admin-only `/api/v1/admin/metrics`, request counts and latency by route template; Prometheus and Grafana as an opt-in Compose profile; SLO recording rules and 4 alerts as code plus a watchdog, each linked to a runbook; the watchdog (`EkaAlertDeliveryFailing`) is emailed directly when Alertmanager cannot reach the triage agent | Prometheus scraped core and edge; the dashboard loaded in Grafana; `promtool test rules` passes 5 alert test cases; watchdog drill with the agent stopped: email in the local catcher after 70 s |
+| Observability | Admin-only `/api/v1/admin/metrics`, request counts and latency by route template; Prometheus and Grafana as an opt-in Compose profile; SLO recording rules and 4 alerts as code plus a watchdog, each linked to a runbook; the watchdog (`EkaAlertDeliveryFailing`) is emailed directly when Alertmanager cannot reach the triage agent; container logs collected by Alloy into Loki (same profile), labelled by Compose service and searchable in Grafana | Prometheus scraped core and edge; the dashboard loaded in Grafana; `promtool test rules` passes 5 alert test cases; watchdog drill with the agent stopped: email in the local catcher after 70 s; Loki received the core's JSON log lines and a live test searched them |
 | Operations | [Runbooks](docs/runbooks.md) per alert, SLOs with error budget, database backup and restore scripts, restore drill | Restore drill passed: migration version, row counts and row-level security identical after restore (8 s, local data) |
-| Web UI (Angular) | Sign-in by API key, document status, streamed chat with citations, conversation list | 11 unit tests; a scripted browser run (sign-in failure and success, documents, verified and fast chat, refusal, sign-out) passed 10 times in a row |
+| Web UI (Angular) | Sign-in by API key (default build) or single sign-on through Keycloak (`--configuration sso`: authorization code with PKCE, bearer token to the edge, sign-out also ends the Keycloak session); document upload and status, streamed chat with citations, conversation list | 26 unit tests (PKCE against the RFC 7636 example, state and nonce checks, one-use verifier, token exchange, session). API-key mode: a scripted browser run passed 10 times in a row. Single sign-on: one run in real Chrome through Keycloak and the edge (sign-in, upload, cited answer, sign-out; signing in again asked for the password) |
 | Identity provider | Keycloak realm in Compose (`--profile idp`) with two test users and an `eka-admin` role | 7 end-to-end checks through the real edge (`scripts/keycloak_e2e.sh`): no or bad token 401, user 200, admin route 403 for a user and 200 for the admin, role claim mapped |
 | File storage | Local disk (default) or S3 / any S3-compatible server (`EKA_STORAGE_BACKEND=s3`), chosen in one place | 9 tests against an in-process fake S3, and 2 against a real S3-compatible server in a container |
 | Reranking (experiment E3) | Optional cross-encoder over the top 20 candidates, off by default ([ADR-032](docs/adr/ADR-032-optional-cross-encoder-reranking.md)) | Evaluation: Hit@1 95.5% to 100%, MRR 0.977 to 1.000 (2 of 44 questions); about 560 ms extra per query on a laptop CPU |
-| Incident triage agent (LangChain4j, Java 21) | Receives Alertmanager webhooks, investigates with 3 read-only tools (PromQL query, service health, runbook), emails a report; token-protected, call budget, audit log, runbook-only fallback ([ADR-033](docs/adr/ADR-033-incident-triage-agent.md)) | 41 tests including the full tool loop with a scripted model; drills against the real stack: a synthetic alert and a real one (core stopped, Prometheus fired `EkaTargetDown`, email in about 4 minutes) both arrived in a local mail catcher. Not run with a live model or real SMTP |
-| Amazon Bedrock chat provider | `EKA_CHAT_PROVIDER=bedrock` through the Converse API, credentials from the AWS chain, no key in settings ([ADR-034](docs/adr/ADR-034-bedrock-provider-and-aws-deployment.md)) | 10 tests against a stub client: request shape, streaming, early close, error mapping. Never called Bedrock |
+| Incident triage agent (LangChain4j, Java 21) | Receives Alertmanager webhooks, investigates with 4 read-only tools (PromQL query, service health, runbook, log search in Loki), emails a report; token-protected, call budget, audit log, runbook-only fallback ([ADR-033](docs/adr/ADR-033-incident-triage-agent.md), [ADR-035](docs/adr/ADR-035-log-search-loki.md)) | 55 tests including the full tool loop with a scripted model (2 of them need a real Loki and passed against one); drills against the real stack: a synthetic alert and a real one (core stopped, Prometheus fired `EkaTargetDown`, email in about 4 minutes) both arrived in a local mail catcher. Not run with a live model or real SMTP |
+| Amazon Bedrock chat provider | `EKA_CHAT_PROVIDER=bedrock` through the Converse API, credentials from the AWS chain, no key in settings ([ADR-034](docs/adr/ADR-034-bedrock-provider-and-aws-deployment.md)). A local Converse stand-in (`python -m eka.tools.bedrock_stub`) lets the unchanged adapter and boto3 run without an account; `EKA_BEDROCK_ENDPOINT_URL` points at it and stays empty for real AWS | 10 tests against a stub client; 6 tests through real boto3 against the stand-in with fake keys (SigV4 signing, Converse JSON, the binary event stream); the 54 evaluation questions through the API with the Bedrock adapter, 54 answers recorded under the Bedrock model id. Never called Bedrock |
+| Provider comparison | `python -m eka.tools.answer_run` asks the evaluation questions through the API; `python -m eka.tools.compare_runs` puts two or more runs side by side (see below) | 3 tests; first table produced (below) |
 | AWS deployment (Terraform, `infra/aws`) | ECS Fargate (edge and core in one task, worker, migration task), RDS PostgreSQL 17, S3, Secrets Manager, load balancer, task role limited to the bucket and Bedrock | `terraform validate` and `fmt` pass (also in CI). Never planned or applied against an account |
 | API contract | Postman collection | 36 assertions, 0 failures against the Compose stack |
 
@@ -119,6 +120,20 @@ BGE recommends putting `Represent this sentence for searching relevant passages:
 
 The prefix changes ranking by one question on one set and lowers every cosine, so the refusal gate would need recalibrating. It stays off (`EKA_EMBEDDING_QUERY_PREFIX`, empty by default). Small sets written by the author; not a benchmark.
 
+### Provider comparison (pipeline check, 2026-11-11)
+
+The 44 questions and 10 challenge questions through `POST /api/v1/chat`, verified mode, same 13 documents. Without an AWS account, the second column comes from the real Bedrock adapter and boto3 pointed at the local stand-in with fake keys:
+
+| Measure | Offline model | Bedrock adapter + local stand-in |
+|---|---|---|
+| Fact found, by string match (of 44) | 32 | 32 |
+| Expected document cited | 42 | 42 |
+| Wrong refusals | 1 | 1 |
+| Unanswerable refused (of 10) | 3 | 3 |
+| Median seconds per answer | 0.08 | 0.09 |
+
+Equal scores are expected: the stand-in answers with the same offline model. The table shows that requests are signed, sent, parsed (including the event stream) and scored end to end; it says nothing about model quality. For the real comparison, set `EKA_CHAT_PROVIDER=bedrock`, the model id and the region, leave `EKA_BEDROCK_ENDPOINT_URL` empty and use real AWS credentials. No code changes.
+
 ### Not done
 
 | Item | Note |
@@ -126,20 +141,24 @@ The prefix changes ranking by one question on one set and lowers every cosine, s
 | Reranking on by default | Needs a larger evaluation set than 13 chunks (see ADR-032) |
 | Live rerun after the q31/q29 fixes | Fixes checked with the offline model only; a `gpt-4o-mini` rerun (cents) needs approval |
 | Full hand scoring of live answers | Only the misses were read (see above) |
-| Other models | Only `gpt-4o-mini` was run |
+| Other models and the real cross-provider table | Only `gpt-4o-mini` was run live; the comparison pipeline is ready and needs Bedrock access (an AWS account and approval of the spend) |
 | Entra ID or other hosted identity provider | Tested against Keycloak only |
-| UI sign-in through the identity provider | The UI still signs in with an API key |
+| UI token refresh | The UI does not refresh tokens: after the 15-minute access token expires, the user signs in again |
 | Real email delivery | Verified only into a local mail catcher; real SMTP not tried |
 | Agent failing after it accepted an alert | The watchdog covers failed deliveries to the agent, not an agent that accepts the alert and then fails to send its email |
-| Log search for the agent | There is no log store |
+| Agent log search with a live model | `searchLogs` was tested with a scripted model and against a real Loki, not with a live model |
+| Logs on AWS | Alloy reads the local Docker socket; on AWS the logs would go to CloudWatch, which is not built |
 | Allowlisted web fallback (ADR-030) | Not built; off by design |
-| Real Bedrock call, real AWS deployment | Needs an AWS account; the code is written and unit-tested or validated only |
+| Real Bedrock call, real AWS deployment | Needs an AWS account; the adapter has run end to end only against the local stand-in, and the Terraform is validated only |
 
 ## Tech stack
 
-Built so far: Python 3.11+, FastAPI, Pydantic, SQLAlchemy 2 (async) over psycopg 3, Alembic, PostgreSQL with pgvector, pytest, Testcontainers, Ruff, mypy, Docker, GitHub Actions (written).
+- **Core:** Python 3.11+, FastAPI, Pydantic, SQLAlchemy 2 (async) over psycopg 3, Alembic, PostgreSQL 17 with pgvector, fastembed (BGE-small embeddings, optional cross-encoder), `pypdf` and `python-docx`, boto3 (S3 and Bedrock); pytest with Testcontainers, Ruff, mypy.
+- **Java 21 and Spring Boot:** the edge on Spring Cloud Gateway with Resilience4j; the triage agent with LangChain4j.
+- **UI:** Angular 22 with Vitest.
+- **Platform:** Docker Compose with Keycloak, Prometheus, Alertmanager, Grafana, Loki and Alloy; GitHub Actions; Terraform for AWS.
 
-Chosen in the design, not yet built: local BGE-small embeddings through fastembed, an OpenAI-compatible chat model behind an interface, `pypdf` and `python-docx` parsers, a Java 21 Spring Boot edge service with OIDC and an internal signed token to the core, an Angular web UI, and local-disk or S3 file storage. There is no orchestration framework in the first version; LangChain is admitted only if a specific need appears ([ADR-002](docs/adr/ADR-002-no-orchestration-framework.md)).
+There is no orchestration framework in the core; LangChain is admitted only if a specific need appears ([ADR-002](docs/adr/ADR-002-no-orchestration-framework.md)).
 
 ## Documentation
 
@@ -148,6 +167,7 @@ Chosen in the design, not yet built: local BGE-small embeddings through fastembe
 | [Business requirements](docs/BRD.md) | Business outcomes, scope, functional and non-functional requirements with status, acceptance criteria, risks |
 | [Decision records](docs/adr/README.md) | One file per architecture decision with options, cost, risk and review trigger |
 | [Runbooks](docs/runbooks.md) | SLOs, one runbook per alert, backup and restore procedure |
+| [Docker guide](docs/DOCKER_GUIDE.md) | Images per Compose profile, start, stop and clean-up |
 | [OpenAPI snapshot](docs/openapi.json) | The committed API contract; a test fails if the code and this file differ |
 | [Postman collection](postman/eka.postman_collection.json) | Contract checks for authentication, authorization, errors and the main flows |
 
@@ -208,6 +228,7 @@ python -m eka.tools.export_openapi --check
 pytest -m "not integration"      # offline tests, no Docker needed
 pytest --cov=eka --cov-fail-under=85   # everything; integration tests start a throwaway PostgreSQL and skip if Docker is off
 (cd gateway && mvn -B verify)     # edge
+(cd ops-agent && mvn -B verify)   # triage agent
 (cd ui && npx ng test --watch=false && npx ng build)
 scripts/restore_drill.sh          # backup, restore to scratch, compare (stack running)
 ```
@@ -219,11 +240,11 @@ If you change the API on purpose, regenerate the snapshot with `python -m eka.to
 ## Docker
 
 ```bash
-docker compose up --build        # database and API
+docker compose up --build        # database, migration, API and worker
 curl http://localhost:8000/health/ready
 ```
 
-Compose needs the settings from `.env` (it refuses to start without `EKA_DB_PASSWORD` and `EKA_API_KEYS`). The image runs as a non-root user, writes JSON logs and defaults to `EKA_ENVIRONMENT=prod`, which hides the API docs; Compose sets `local` so `/docs` stays available. Compose does not apply migrations yet (a one-shot migrate service arrives with ingestion): run `alembic upgrade head` once against the database. The database port is published on `127.0.0.1` only, for local use.
+Compose needs the settings from `.env` (it refuses to start without `EKA_DB_PASSWORD` and `EKA_API_KEYS`). The image runs as a non-root user, writes JSON logs and defaults to `EKA_ENVIRONMENT=prod`, which hides the API docs; Compose sets `local` so `/docs` stays available. A one-shot `migrate` service applies the schema before the API and the worker start. Optional profiles (`edge`, `idp`, `monitoring`, `agent`) are listed in the [Docker guide](docs/DOCKER_GUIDE.md). The database port is published on `127.0.0.1` only, for local use.
 
 ## Configuration
 
@@ -233,11 +254,11 @@ Compose needs the settings from `.env` (it refuses to start without `EKA_DB_PASS
 | `EKA_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING` or `ERROR` |
 | `EKA_LOG_JSON` | `false` (`true` in the image) | One JSON object per log line |
 | `EKA_DATABASE_URL` | none (required) | `postgresql+psycopg://user:password@host:port/database`; treated as a secret |
-| `EKA_AUTH_MODE` | none (required) | `api_key` (`gateway` is rejected until the Java edge exists) |
+| `EKA_AUTH_MODE` | none (required) | `api_key` (the core on its own) or `gateway` (behind the edge: only the edge's internal token is accepted; needs `EKA_GATEWAY_JWKS_URL`) |
 | `EKA_API_KEYS` | none (required in `api_key` mode) | JSON object: `{"<user-id>": {"sha256": "<64 hex characters>", "role": "user"}}` with role `user` or `admin` |
 | `EKA_DB_PASSWORD`, `EKA_DB_PORT` | none (required), `5432` | Used by `docker-compose.yml` for the database service |
 
-Settings come from environment variables or a git-ignored `.env` file (copy `.env.example`). Secrets are supplied the same way and never committed.
+The chat provider (fake, OpenAI-compatible or Bedrock), file storage, reranker and limits are listed with comments in `.env.example`. Settings come from environment variables or a git-ignored `.env` file (copy `.env.example`). Secrets are supplied the same way and never committed.
 
 ## API
 
@@ -267,11 +288,18 @@ src/eka/
   logging_config.py   text or JSON logs
   domain/             models and typed errors; imports nothing else
   ports/              repository interfaces (owner_id is always the first argument)
-  security/           API-key authentication
+  security/           API-key and edge-token authentication
+  services/           retrieval, answering, citation grounding check
+  ingestion/          file sniffing, parsers, cleaning, chunking
+  eval/               retrieval evaluation harness and CI gate
   api/                routers, dependencies, the problem+json handler
   adapters/db/        engine and row-level-security session, table models, repositories
-  tools/              hash_key, export_openapi, loadtest
+  tools/              hash_key, export_openapi, loadtest, answer_run, compare_runs, bedrock_stub
+gateway/              Java 21 edge (Spring Cloud Gateway)
+ui/                   Angular web UI
 ops-agent/            incident triage agent (Java 21, LangChain4j): webhook, read-only tools, report email
+monitoring/           Prometheus rules and tests, Alertmanager, Grafana, Loki and Alloy configuration
+infra/aws/            Terraform for an AWS deployment (validated, never applied)
 keycloak/             test realm for the identity provider profile
 scripts/              database backup, restore, restore drill, Keycloak end-to-end check
 alembic/              migrations (roles, tables, indexes, row-level security)
@@ -281,15 +309,23 @@ tests/                offline tests; tests/integration needs Docker
 
 ## Web UI
 
-An Angular app in `ui/` with sign-in by API key, document upload and status, and chat with streamed
-answers and citations.
+An Angular app in `ui/` with document upload and status, and chat with streamed answers and
+citations. How it signs in is chosen when it is built or served:
 
-```bash
-docker compose up -d          # core on :8000
-cd ui && npm ci && npm start  # http://localhost:4200, /api proxied to :8000
-```
+| Mode | Start | Talks to |
+|---|---|---|
+| API key (default) | `docker compose up -d`, then `cd ui && npm ci && npm start` | the core on :8000 |
+| Single sign-on | `docker compose --profile edge --profile idp up -d --build`, then `cd ui && npm ci && npm run start:sso` | Keycloak on :8180, the edge on :8080 |
 
-Tests: `npm test`. The API key stays in `sessionStorage` for the tab only.
+Both serve http://localhost:4200. For single sign-on, add `127.0.0.1 keycloak` to the hosts file:
+Keycloak always issues tokens as `http://keycloak:8180`, the issuer the edge checks. Sign in as
+`alice` or `boss` with the passwords from `.env`. The browser uses the authorization code flow with
+PKCE, without a client secret or a library (`ui/src/app/oidc.ts`). If the Keycloak container existed
+before 2026-11-11, recreate it once (`docker compose --profile idp up -d --force-recreate keycloak`)
+so the realm with the sign-out redirect is imported.
+
+Tests: `npm test` (26). The API key or token stays in `sessionStorage` for the tab only; tokens are
+not refreshed, so after 15 minutes you sign in again.
 
 ## Postman collection
 

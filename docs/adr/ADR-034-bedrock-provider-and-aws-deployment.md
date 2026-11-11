@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Accepted (built and unit-tested; not run against AWS) |
+| Status | Accepted (built; tested through boto3 against a local Converse stand-in; not run against AWS) |
 | Date | 2026-11-08 |
 | Decision owner | Maintainer |
 | Review trigger | The first real Bedrock call or `terraform apply`, whichever comes first; a cost above the estimate in `infra/aws/README.md`. |
@@ -29,5 +29,6 @@ The chat model sits behind a port with a fake and an OpenAI-compatible adapter. 
 
 ## Consequences
 - The adapter is tested against a stub client (request shape, streaming, early close, error mapping), not against Bedrock. Model access must be enabled in the AWS account, and the first real call may show differences (inference profile ids, regional availability).
+- Added 2026-11-11: a local Converse stand-in (`python -m eka.tools.bedrock_stub`) answers with the offline extractive model. With `EKA_BEDROCK_ENDPOINT_URL` pointing at it and fake AWS keys, the unchanged adapter and boto3 sign each request (SigV4), send it over HTTP and parse the reply, including the binary event stream of ConverseStream. The 54 evaluation questions ran through the API this way, and `eka.tools.compare_runs` builds the provider table from such runs. For real Bedrock the endpoint stays empty and real credentials are used; no code changes. The stand-in proves the plumbing, not Bedrock: model access, inference profile ids, regional availability, latency and answer quality are still unverified.
 - The Terraform is validated but never applied. The estimate in its README is rough.
 - Generated secrets live in Terraform state, so the state must be in an encrypted remote backend.

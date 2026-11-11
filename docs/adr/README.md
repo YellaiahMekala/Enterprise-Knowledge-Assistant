@@ -20,7 +20,7 @@ Template: Status, Date, Decision owner, Review trigger, Related requirements or 
 | [ADR-012](ADR-012-isolation-repository-contract-rls.md) | Isolation by repository contract plus row-level security | Proposed |
 | [ADR-013](ADR-013-storage-port.md) | Storage port with local disk and S3 adapters | Accepted |
 | [ADR-014](ADR-014-sse-over-post-fetch.md) | Streaming over POST with fetch, not EventSource | Proposed |
-| [ADR-015](ADR-015-angular-nginx-same-origin.md) | Angular frontend served by nginx on the same origin | Accepted (amended by ADR-022) |
+| [ADR-015](ADR-015-angular-nginx-same-origin.md) | Angular frontend served by nginx on the same origin | Accepted (amended by ADR-022 and on 2026-11-11) |
 | [ADR-016](ADR-016-problem-json-errors.md) | RFC 9457 problem+json for all errors | Proposed |
 | [ADR-017](ADR-017-plain-parsers.md) | Plain parsers, not Unstructured or LlamaParse | Proposed |
 | [ADR-018](ADR-018-retrieval-eval-in-ci.md) | Retrieval evaluation in CI; model-judged evaluation manual | Proposed |
@@ -40,3 +40,4 @@ Template: Status, Date, Decision owner, Review trigger, Related requirements or 
 | [ADR-032](ADR-032-optional-cross-encoder-reranking.md) | Optional cross-encoder reranking, off by default | Accepted |
 | [ADR-033](ADR-033-incident-triage-agent.md) | Incident triage agent as a separate service | Accepted |
 | [ADR-034](ADR-034-bedrock-provider-and-aws-deployment.md) | Bedrock chat provider and an AWS deployment shape | Accepted |
+| [ADR-035](ADR-035-log-search-loki.md) | Log search for the triage agent with Loki and Alloy | Accepted |

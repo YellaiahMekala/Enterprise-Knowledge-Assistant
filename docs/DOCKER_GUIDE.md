@@ -15,6 +15,12 @@ Run every command from the `enterprise-knowledge-assistant/` folder in Git Bash.
 | `enterprise-knowledge-assistant-edge` | `edge` | `edge` | Build (`gateway/Dockerfile`) |
 | `prom/prometheus:v3.5.0` | `prometheus` | `monitoring` | Pull |
 | `grafana/grafana:12.1.0` | `grafana` | `monitoring` | Pull |
+| `prom/alertmanager:v0.28.1` | `alertmanager` | `monitoring` | Pull |
+| `grafana/loki:3.5.3` | `loki` | `monitoring` | Pull |
+| `grafana/alloy:v1.10.2` | `alloy` | `monitoring` | Pull |
+| `quay.io/keycloak/keycloak:26.3` | `keycloak` | `idp` | Pull |
+| `enterprise-knowledge-assistant-ops-agent` | `ops-agent` | `agent` | Build (`ops-agent/Dockerfile`) |
+| `axllent/mailpit:v1.27` | `mailpit` | `agent` | Pull |
 
 Base images used by the builds (pulled automatically during `build`):
 `python:3.12-slim`, `maven:3.9-eclipse-temurin-21`, `eclipse-temurin:21-jre`.
@@ -25,6 +31,11 @@ Base images used by the builds (pulled automatically during `build`):
 docker pull pgvector/pgvector:0.8.7-pg17
 docker pull prom/prometheus:v3.5.0
 docker pull grafana/grafana:12.1.0
+docker pull prom/alertmanager:v0.28.1
+docker pull grafana/loki:3.5.3
+docker pull grafana/alloy:v1.10.2
+docker pull quay.io/keycloak/keycloak:26.3
+docker pull axllent/mailpit:v1.27
 
 # Optional: pre-pull base images so builds are faster
 docker pull python:3.12-slim
@@ -35,7 +46,7 @@ docker pull eclipse-temurin:21-jre
 Or let Compose pull everything the selected profiles need:
 
 ```bash
-docker compose --profile edge --profile monitoring pull --ignore-buildable
+docker compose --profile edge --profile idp --profile monitoring --profile agent pull --ignore-buildable
 ```
 
 ## 3. Build the project images
@@ -62,8 +73,14 @@ docker compose --profile edge up -d --build
 # With Prometheus + Grafana
 docker compose --profile monitoring up -d
 
+# Identity provider (Keycloak on :8180) for the edge and the UI's single sign-on
+docker compose --profile edge --profile idp up -d --build
+
+# Triage agent and the local mail catcher (needs the monitoring profile)
+docker compose --profile monitoring --profile agent up -d --build
+
 # Everything
-docker compose --profile edge --profile monitoring up -d --build
+docker compose --profile edge --profile idp --profile monitoring --profile agent up -d --build
 ```
 
 Check that it's running:
@@ -76,8 +93,9 @@ docker compose logs -f api
 ## 5. Stop and clean up
 
 ```bash
-docker compose --profile edge --profile monitoring down      # stop; volumes (data) are kept
-docker compose --profile edge --profile monitoring down --rmi local   # also remove the project-built images
+P="--profile edge --profile idp --profile monitoring --profile agent"
+docker compose $P down               # stop; volumes (data) are kept
+docker compose $P down --rmi local   # also remove the project-built images
 ```
 
 **Do not** use `down -v` unless you want to delete the data volumes:
@@ -87,14 +105,16 @@ docker compose --profile edge --profile monitoring down --rmi local   # also rem
 | `enterprise-knowledge-assistant_eka-pgdata` | Database: documents, chunks, embeddings |
 | `enterprise-knowledge-assistant_eka-files` | Uploaded files |
 | `enterprise-knowledge-assistant_eka-models` | Cached models (re-downloaded if deleted; slow first start) |
+| `enterprise-knowledge-assistant_eka-loki` | Container logs kept by Loki (3 days) |
 
 ## 6. Free disk space later
 
 ```bash
 docker rmi enterprise-knowledge-assistant-api enterprise-knowledge-assistant-worker \
   enterprise-knowledge-assistant-migrate enterprise-knowledge-assistant-core-behind-edge \
-  enterprise-knowledge-assistant-edge
-docker rmi prom/prometheus:v3.5.0 grafana/grafana:12.1.0
+  enterprise-knowledge-assistant-edge enterprise-knowledge-assistant-ops-agent
+docker rmi prom/prometheus:v3.5.0 grafana/grafana:12.1.0 prom/alertmanager:v0.28.1 \
+  grafana/loki:3.5.3 grafana/alloy:v1.10.2 quay.io/keycloak/keycloak:26.3 axllent/mailpit:v1.27
 docker builder prune -f
 ```
 
