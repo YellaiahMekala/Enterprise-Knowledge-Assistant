@@ -26,6 +26,11 @@ export class App {
   private readonly router = inject(Router);
   private readonly oidc = inject(OidcClient);
 
+  constructor() {
+    // Renew the access token in the background shortly before it expires.
+    this.session.keepFresh((token) => this.oidc.refresh(token));
+  }
+
   /** Also ends the session at the identity provider, so the next sign-in asks for a password. */
   protected async signOut(): Promise<void> {
     const idToken = this.session.idToken();

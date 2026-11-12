@@ -97,4 +97,102 @@ describe('SessionService', () => {
     expect(renew).not.toHaveBeenCalled();
     expect(session.authHeaders()).toEqual({ 'X-API-Key': 'k1' });
   });
+
+  describe('renewal before expiry', () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    it('renews in the background one lead time before the token expires', async () => {
+      const session = new SessionService();
+      session.signInWithTokens(tokens({ expiresAt: Date.now() + 5 * 60_000 }));
+      const renew = vi.fn(async () =>
+        tokens({ accessToken: 'at2', refreshToken: 'rt2', expiresAt: Date.now() + 5 * 60_000 }),
+      );
+      session.keepFresh(renew);
+
+      await vi.advanceTimersByTimeAsync(4 * 60_000 - 1);
+      expect(renew).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(2);
+
+      expect(renew).toHaveBeenCalledTimes(1);
+      expect(renew).toHaveBeenCalledWith('rt');
+      expect(session.authHeaders()).toEqual({ Authorization: 'Bearer at2' });
+    });
+
+    it('schedules the next renewal for the new token', async () => {
+      const session = new SessionService();
+      session.signInWithTokens(tokens({ expiresAt: Date.now() + 2 * 60_000 }));
+      let n = 0;
+      const renew = vi.fn(async () =>
+        tokens({ accessToken: `at${++n}`, refreshToken: `rt${n}`, expiresAt: Date.now() + 2 * 60_000 }),
+      );
+      session.keepFresh(renew);
+
+      await vi.advanceTimersByTimeAsync(3 * 60_000);
+
+      expect(renew).toHaveBeenCalledTimes(3);
+      expect(renew).toHaveBeenLastCalledWith('rt2');
+    });
+
+    it('renews at once when the token is already inside the lead time', async () => {
+      const session = new SessionService();
+      session.signInWithTokens(tokens({ expiresAt: Date.now() + 10_000 }));
+      const renew = vi.fn(async () => tokens({ accessToken: 'at2', expiresAt: Date.now() + 5 * 60_000 }));
+
+      session.keepFresh(renew);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(renew).toHaveBeenCalledTimes(1);
+    });
+
+    it('shares one renewal with a request that arrives at the same moment', async () => {
+      const session = new SessionService();
+      session.signInWithTokens(tokens({ expiresAt: Date.now() + 10_000 }));
+      const renew = vi.fn(async () => tokens({ accessToken: 'at2', expiresAt: Date.now() + 5 * 60_000 }));
+      session.keepFresh(renew);
+
+      await vi.advanceTimersByTimeAsync(0);
+      await session.fresh(renew); // still valid after the renewal, so no second call
+
+      expect(renew).toHaveBeenCalledTimes(1);
+    });
+
+    it('stops on sign-out and never renews an API key', async () => {
+      const session = new SessionService();
+      session.signInWithTokens(tokens({ expiresAt: Date.now() + 5 * 60_000 }));
+      const renew = vi.fn(async () => tokens());
+      session.keepFresh(renew);
+
+      session.signOut();
+      await vi.advanceTimersByTimeAsync(10 * 60_000);
+      session.signIn('k1');
+      await vi.advanceTimersByTimeAsync(10 * 60_000);
+
+      expect(renew).not.toHaveBeenCalled();
+    });
+
+    it('signs out when the background renewal fails', async () => {
+      const session = new SessionService();
+      session.signInWithTokens(tokens({ expiresAt: Date.now() + 90_000 }));
+      session.keepFresh(async () => {
+        throw new Error('session has ended');
+      });
+
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      expect(session.signedIn()).toBe(false);
+    });
+
+    it('looks again after a clamped timer instead of renewing a young token', async () => {
+      const session = new SessionService();
+      const day = 24 * 3600_000;
+      session.signInWithTokens(tokens({ expiresAt: Date.now() + 40 * day }));
+      const renew = vi.fn(async () => tokens());
+      session.keepFresh(renew);
+
+      await vi.advanceTimersByTimeAsync(25 * day);
+
+      expect(renew).not.toHaveBeenCalled();
+    });
+  });
 });
