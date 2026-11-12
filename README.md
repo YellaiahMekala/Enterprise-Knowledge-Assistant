@@ -44,7 +44,7 @@ the history.
 | Identity provider | Keycloak realm in Compose (`--profile idp`) with two test users and an `eka-admin` role | 7 end-to-end checks through the real edge (`scripts/keycloak_e2e.sh`): no or bad token 401, user 200, admin route 403 for a user and 200 for the admin, role claim mapped. Refresh tokens rotate (single use, 30-minute idle and 8-hour session limits): a refreshed token passed the edge, reusing the old refresh token was refused, and after that attempt Keycloak refused the newer one too |
 | File storage | Local disk (default) or S3 / any S3-compatible server (`EKA_STORAGE_BACKEND=s3`), chosen in one place | 9 tests against an in-process fake S3, and 2 against a real S3-compatible server in a container |
 | Reranking (experiment E3) | Optional cross-encoder over the top 20 candidates, off by default ([ADR-032](docs/adr/ADR-032-optional-cross-encoder-reranking.md)) | Evaluation: Hit@1 95.5% to 100%, MRR 0.977 to 1.000 (2 of 44 questions); about 560 ms extra per query on a laptop CPU |
-| Incident triage agent (LangChain4j, Java 21) | Receives Alertmanager webhooks, investigates with 4 read-only tools (PromQL query, service health, runbook, log search in Loki), emails a report; token-protected, call budget, audit log, runbook-only fallback ([ADR-033](docs/adr/ADR-033-incident-triage-agent.md), [ADR-035](docs/adr/ADR-035-log-search-loki.md)) | 55 tests including the full tool loop with a scripted model (2 of them need a real Loki and passed against one); drills against the real stack: a synthetic alert and a real one (core stopped, Prometheus fired `EkaTargetDown`, email in about 4 minutes) both arrived in a local mail catcher. Not run with a live model or real SMTP |
+| Incident triage agent (LangChain4j, Java 21) | Receives Alertmanager webhooks, investigates with 4 read-only tools (PromQL query, service health, runbook, log search in Loki or CloudWatch Logs), emails a report; token-protected, call budget, audit log, runbook-only fallback ([ADR-033](docs/adr/ADR-033-incident-triage-agent.md), [ADR-035](docs/adr/ADR-035-log-search-loki.md)) | 66 tests (2 Loki and 3 CloudWatch live ones skip unless an endpoint is set) including the full tool loop with a scripted model (2 of them need a real Loki and passed against one); drills against the real stack: a synthetic alert and a real one (core stopped, Prometheus fired `EkaTargetDown`, email in about 4 minutes) both arrived in a local mail catcher. Not run with a live model or real SMTP |
 | Amazon Bedrock chat provider | `EKA_CHAT_PROVIDER=bedrock` through the Converse API, credentials from the AWS chain, no key in settings ([ADR-034](docs/adr/ADR-034-bedrock-provider-and-aws-deployment.md)). A local Converse stand-in (`python -m eka.tools.bedrock_stub`) lets the unchanged adapter and boto3 run without an account; `EKA_BEDROCK_ENDPOINT_URL` points at it and stays empty for real AWS | 10 tests against a stub client; 6 tests through real boto3 against the stand-in with fake keys (SigV4 signing, Converse JSON, the binary event stream); the 54 evaluation questions through the API with the Bedrock adapter, 54 answers recorded under the Bedrock model id. Never called Bedrock |
 | Provider comparison | `python -m eka.tools.answer_run` asks the evaluation questions through the API; `python -m eka.tools.compare_runs` puts two or more runs side by side (see below) | 3 tests; first table produced (below) |
 | AWS deployment (Terraform, `infra/aws`) | ECS Fargate (edge and core in one task, worker, migration task), RDS PostgreSQL 17, S3, Secrets Manager, load balancer, task role limited to the bucket and Bedrock | `terraform validate` and `fmt` pass (also in CI). Never planned or applied against an account |
@@ -141,13 +141,15 @@ Equal scores are expected: the stand-in answers with the same offline model. The
 |---|---|
 | Reranking on by default | Needs a larger evaluation set than 13 chunks (see ADR-032) |
 | Live rerun after the q31/q29 fixes | Fixes checked with the offline model only; a `gpt-4o-mini` rerun (cents) needs approval |
+| Token, cost and time-to-first-token accounting | Planned (phase P10, [ADR-037](docs/adr/ADR-037-token-cost-and-ttft-accounting.md), FR-53). Usage events hold sizes in characters only; provider token counts are discarded and first-token time is not measured |
+| Model fallback chain with a circuit breaker | Planned (phase P10, [ADR-038](docs/adr/ADR-038-model-fallback-chain-and-breaker.md), FR-54). Each adapter retries with backoff, but a provider outage is still a 502 because nothing fails over to a second model |
 | Full hand scoring of live answers | Only the misses were read (see above) |
 | Other models and the real cross-provider table | Only `gpt-4o-mini` was run live; the comparison pipeline is ready and needs Bedrock access (an AWS account and approval of the spend) |
 | Entra ID or other hosted identity provider | Tested against Keycloak only |
 | Real email delivery | Verified only into a local mail catcher; real SMTP not tried |
 | Agent failing after it accepted an alert | The watchdog covers failed deliveries to the agent, not an agent that accepts the alert and then fails to send its email |
 | Agent log search with a live model | `searchLogs` was tested with a scripted model and against a real Loki, not with a live model |
-| Logs on AWS | Alloy reads the local Docker socket; on AWS the logs would go to CloudWatch, which is not built |
+| Logs on AWS | The Terraform sends container logs to CloudWatch and the triage agent has a CloudWatch search adapter (`OPS_AGENT_CLOUDWATCH_LOG_GROUP`), tested against LocalStack only; the agent itself is not deployed by the Terraform and nothing ran on real AWS |
 | Web fallback beyond fixed entry pages | v1 fetches only the configured entry URLs (no search engine, no crawling), and only with the fake model so far. A page that the worker has not indexed within 30 s is used from the next question on |
 | Real Bedrock call, real AWS deployment | Needs an AWS account; the adapter has run end to end only against the local stand-in, and the Terraform is validated only |
 
@@ -327,9 +329,9 @@ before 2026-11-11, recreate it once (`docker compose --profile idp up -d --force
 so the realm with the sign-out redirect and refresh token rotation is imported. The test users
 have fixed ids there, so recreating Keycloak does not change which documents they see.
 
-Tests: `npm test` (32). The API key or tokens stay in `sessionStorage` for the tab only. The access
+Tests: `npm test` (39). The API key or tokens stay in `sessionStorage` for the tab only. The access
 token lives 15 minutes; when it has expired, the app swaps the refresh token for a new pair before
-the next request (one renewal shared by concurrent requests). Keycloak rotates refresh tokens and
+the next request, and a timer renews it a minute before it expires so an open page never sends an expired one (one renewal shared by the timer and concurrent requests). Keycloak rotates refresh tokens and
 ends the session after 30 idle minutes or 8 hours; then the renewal fails and you sign in again.
 A Keycloak container created before this change must be recreated once to import these settings.
 
