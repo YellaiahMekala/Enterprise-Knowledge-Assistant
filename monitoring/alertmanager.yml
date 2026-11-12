@@ -22,6 +22,11 @@ route:
       matchers: [alertname="EkaAlertDeliveryFailing"]
       group_wait: 10s
       repeat_interval: 1h
+    # The agent took the alert but its report did not go out: the agent cannot tell anyone itself.
+    - receiver: direct-email-reports
+      matchers: [alertname=~"EkaTriageReportFailed|EkaTriageReportStuck"]
+      group_wait: 10s
+      repeat_interval: 1h
 
 receivers:
   - name: ops-agent
@@ -39,3 +44,10 @@ receivers:
         send_resolved: true
         headers:
           Subject: "[EKA] {{ .Status | toUpper }}: alerts are not reaching the triage agent"
+
+  - name: direct-email-reports
+    email_configs:
+      - to: eka-oncall@localhost
+        send_resolved: true
+        headers:
+          Subject: "[EKA] {{ .Status | toUpper }}: triage reports are not being sent ({{ .CommonLabels.alertname }})"

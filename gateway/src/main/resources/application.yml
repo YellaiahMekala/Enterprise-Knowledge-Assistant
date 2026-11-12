@@ -58,6 +58,21 @@ management:
     health:
       probes:
         enabled: true
+  # Traces (NFR-07): the edge starts the trace and sends W3C traceparent to the core. Spans are
+  # exported only when an OTLP endpoint is set (e.g. http://jaeger:4318/v1/traces).
+  tracing:
+    sampling:
+      probability: ${EKA_EDGE_TRACE_SAMPLE_RATIO:1.0}
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: ${EKA_EDGE_OTEL_ENDPOINT:http://localhost:4318/v1/traces}
+  otlp:
+    tracing:
+      export:
+        # Off unless an endpoint is given; an empty URL would stop the edge from starting.
+        enabled: ${EKA_EDGE_OTEL_ENABLED:false}
 
 eka:
   edge:

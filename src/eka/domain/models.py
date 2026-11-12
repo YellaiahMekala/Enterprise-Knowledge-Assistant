@@ -255,6 +255,52 @@ class UsageEvent:
     prompt_chars: int
     completion_chars: int
     latency_ms: int
+    provider: str | None = None
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    token_source: str | None = None  # "provider" or "estimated"
+    cost_usd: float | None = None
+    ttft_ms: int | None = None  # request start to the first model fragment
+    answer_ttfb_ms: int | None = None  # request start to the first text sent to the client
+
+
+@dataclass(frozen=True, slots=True)
+class UsageRow:
+    """One line of the admin usage report: one user or one day (ADR-037). No text."""
+
+    key: str
+    requests: int
+    refused: int
+    prompt_tokens: int | None  # None when no event in the group has counts (before migration 0004)
+    completion_tokens: int | None
+    cost_usd: float | None
+    latency_p50_ms: int | None
+    latency_p95_ms: int | None
+    ttft_p50_ms: int | None
+    ttft_p95_ms: int | None
+
+
+@dataclass(slots=True)
+class TokenUsage:
+    """Filled by a chat adapter during one or more calls (ADR-037). ``model`` and ``provider`` are
+    those of the last model that answered."""
+
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    estimated: bool = False
+    calls: int = 0
+    model: str | None = None
+    provider: str | None = None
+
+    def add(
+        self, model: str, provider: str, prompt: int, completion: int, *, estimated: bool = False
+    ) -> None:
+        self.prompt_tokens += prompt
+        self.completion_tokens += completion
+        self.estimated = self.estimated or estimated
+        self.calls += 1
+        self.model = model
+        self.provider = provider
 
 
 @dataclass(frozen=True, slots=True)

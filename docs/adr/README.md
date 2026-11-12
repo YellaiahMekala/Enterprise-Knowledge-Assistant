@@ -42,5 +42,5 @@ Template: Status, Date, Decision owner, Review trigger, Related requirements or 
 | [ADR-034](ADR-034-bedrock-provider-and-aws-deployment.md) | Bedrock chat provider and an AWS deployment shape | Accepted |
 | [ADR-035](ADR-035-log-search-loki.md) | Log search for the triage agent with Loki and Alloy | Accepted |
 | [ADR-036](ADR-036-citation-grounding-and-refusal-gate.md) | Citation grounding check and a refusal gate of 0.50 | Accepted |
-| [ADR-037](ADR-037-token-cost-and-ttft-accounting.md) | Token, cost and time-to-first-token accounting | Proposed |
-| [ADR-038](ADR-038-model-fallback-chain-and-breaker.md) | Model fallback chain with a per-model circuit breaker | Proposed |
+| [ADR-037](ADR-037-token-cost-and-ttft-accounting.md) | Token, cost and time-to-first-token accounting | Accepted |
+| [ADR-038](ADR-038-model-fallback-chain-and-breaker.md) | Model fallback chain with a per-model circuit breaker | Accepted |

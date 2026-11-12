@@ -4,18 +4,21 @@ generator returned by ``stream`` must stop the request to the provider."""
 from collections.abc import AsyncGenerator, Sequence
 from typing import Protocol
 
-from eka.domain.models import ChatMessage
+from eka.domain.models import ChatMessage, TokenUsage
 
 
 class ChatModel(Protocol):
     model_name: str
 
-    async def complete(self, messages: Sequence[ChatMessage], *, max_tokens: int) -> str:
-        """The whole reply. Raises ``ModelUnavailable`` or ``ModelTimeout``."""
+    async def complete(
+        self, messages: Sequence[ChatMessage], *, max_tokens: int, usage: TokenUsage | None = None
+    ) -> str:
+        """The whole reply. Raises ``ModelUnavailable`` or ``ModelTimeout``. When ``usage`` is
+        given, the adapter adds the call's token counts to it (ADR-037)."""
         ...
 
     def stream(
-        self, messages: Sequence[ChatMessage], *, max_tokens: int
+        self, messages: Sequence[ChatMessage], *, max_tokens: int, usage: TokenUsage | None = None
     ) -> AsyncGenerator[str, None]:
         """The reply as text fragments, in order. Raises like ``complete``."""
         ...

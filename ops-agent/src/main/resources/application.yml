@@ -19,7 +19,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
 
 ops:
   webhook-token: ${OPS_AGENT_WEBHOOK_TOKEN:}

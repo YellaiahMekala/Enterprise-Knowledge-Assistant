@@ -28,6 +28,7 @@ def make_settings(**overrides: Any) -> Settings:
     ``_env_file=None`` keeps a developer's real .env out of the tests."""
     values: dict[str, Any] = {
         "environment": "test",
+        "ready_requires_embedder": False,  # tests that need it turn it on
         "auth_mode": "api_key",
         "api_keys": api_keys(),
     }

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Proposed (task P10-C) |
+| Status | Accepted (task P10-C, built 2026-11-12) |
 | Date | 2026-11-12 |
 | Decision owner | Maintainer |
 | Review trigger | More than two models in a chain; a need to route by task or by data class (a separate decision); failover that hides a real outage for too long. |

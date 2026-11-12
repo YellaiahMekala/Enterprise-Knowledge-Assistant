@@ -33,3 +33,30 @@ def test_summary_counts_facts_citations_and_refusals() -> None:
     assert summary["wrong_refusals"] == ["q3"]
     assert summary["answered_but_doc_not_cited"] == ["q2"]
     assert summary["challenge_refused"] == 1 and summary["challenge_answered"] == ["c2"]
+
+
+def test_usage_summary_sums_the_report_and_prices_100_questions() -> None:
+    from datetime import UTC, datetime
+
+    import httpx
+
+    from eka.tools.answer_run import usage_summary
+
+    rows = [
+        {"key": "u1", "requests": 3, "prompt_tokens": 3000, "completion_tokens": 90,
+         "cost_usd": 0.0006, "refused": 0},
+        {"key": "u2", "requests": 1, "prompt_tokens": 900, "completion_tokens": 30,
+         "cost_usd": None, "refused": 1},
+    ]  # fmt: skip
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"rows": rows})
+
+    client = httpx.Client(base_url="http://api", transport=httpx.MockTransport(handler))
+    start, end = datetime(2026, 11, 12, tzinfo=UTC), datetime(2026, 11, 13, tzinfo=UTC)
+    summary = usage_summary(client, start, end)
+    assert seen[0].url.params["group_by"] == "user"
+    assert summary["requests"] == 4 and summary["prompt_tokens"] == 3900
+    assert summary["cost_usd"] == 0.0006 and summary["cost_per_100_questions_usd"] == 0.015

@@ -83,6 +83,22 @@ class AlertWebhookControllerTest {
     }
 
     @Test
+    void theDeliveryCountsAreServedForPrometheus() throws Exception {
+        send("test-token-0123456789", FIRING).andExpect(status().isAccepted());
+        verify(mailer, timeout(5_000)).send(any());
+
+        String body = mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                        "/actuator/prometheus"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        assertThat(body)
+                .contains("eka_ops_alerts_accepted_total")
+                .contains("eka_ops_reports_sent_total")
+                .contains("eka_ops_reports_failed_total")
+                .contains("eka_ops_reports_pending");
+    }
+
+    @Test
     void aBodyThatIsNotJsonIs400() throws Exception {
         send("test-token-0123456789", "not json").andExpect(status().isBadRequest());
     }
@@ -92,7 +108,7 @@ class AlertWebhookControllerTest {
         var properties = new com.eka.ops.config.OpsProperties(
                 " ", "http://p", "http://c", "http://e", null, null, java.nio.file.Path.of("x"), 3, java.time.Duration.ofSeconds(1), null, null);
         org.assertj.core.api.Assertions.assertThatThrownBy(
-                        () -> new AlertWebhookController(properties, null, null, Runnable::run))
+                        () -> new AlertWebhookController(properties, null, Runnable::run))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("OPS_AGENT_WEBHOOK_TOKEN");
     }

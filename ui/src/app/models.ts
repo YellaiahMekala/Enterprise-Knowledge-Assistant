@@ -57,3 +57,29 @@ export interface Problem {
   title: string;
   detail?: string;
 }
+
+/** One user or one UTC day in the admin usage report (counts and timings only, never text). */
+export interface UsageLine {
+  key: string;
+  requests: number;
+  refused: number;
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
+  cost_usd: number | null;
+  latency_p50_ms: number | null;
+  latency_p95_ms: number | null;
+  ttft_p50_ms: number | null;
+  ttft_p95_ms: number | null;
+}
+
+export interface UsageReport {
+  group_by: 'user' | 'day';
+  start: string;
+  end: string;
+  rows: UsageLine[];
+}
+
+export interface DocumentCounts {
+  total: number;
+  by_status: Record<DocumentStatus, number>;
+}

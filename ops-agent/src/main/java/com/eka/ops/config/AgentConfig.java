@@ -1,5 +1,6 @@
 package com.eka.ops.config;
 
+import com.eka.ops.delivery.ReportDelivery;
 import com.eka.ops.mail.ReportMailer;
 import com.eka.ops.mail.SmtpReportMailer;
 import com.eka.ops.tools.CloudWatchLogStore;
@@ -10,6 +11,7 @@ import com.eka.ops.tools.RunbookReader;
 import com.eka.ops.triage.TriageService;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -66,6 +68,12 @@ public class AgentConfig {
     @Bean
     ReportMailer reportMailer(JavaMailSender sender, OpsProperties properties) {
         return new SmtpReportMailer(sender, properties.mail());
+    }
+
+    /** Three tries to email a report, 5 s then 10 s apart, before it counts as failed. */
+    @Bean
+    ReportDelivery reportDelivery(TriageService triage, ReportMailer mailer, MeterRegistry registry) {
+        return new ReportDelivery(triage, mailer, registry, 3, Duration.ofSeconds(5), d -> Thread.sleep(d));
     }
 
     @Bean

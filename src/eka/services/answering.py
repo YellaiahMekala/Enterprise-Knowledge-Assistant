@@ -43,6 +43,7 @@ from eka.domain.models import (
     SearchFilters,
     SearchHit,
     StoredMessage,
+    TokenUsage,
     UsageEvent,
 )
 from eka.ports.chat import ChatModel
@@ -78,6 +79,29 @@ class AnswerSettings:
     max_context_chars: int = 12_000
     history_messages: int = 6
     max_output_tokens: int = 600
+    # US dollars per million tokens; the cost stays empty unless both are set (ADR-037).
+    price_input_per_1m: float | None = None
+    price_output_per_1m: float | None = None
+
+
+@dataclass(slots=True)
+class _Timing:
+    """Seconds on the service clock: first model fragment, and first text sent to the client."""
+
+    first_fragment: float | None = None
+    first_text: float | None = None
+
+
+def cost_usd(tokens: TokenUsage, settings: AnswerSettings) -> float | None:
+    if tokens.calls == 0 or settings.price_input_per_1m is None:
+        return None
+    if settings.price_output_per_1m is None:
+        return None
+    return round(
+        tokens.prompt_tokens * settings.price_input_per_1m / 1_000_000
+        + tokens.completion_tokens * settings.price_output_per_1m / 1_000_000,
+        6,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -166,7 +190,9 @@ class AnswerService:
         *,
         clock: Callable[[], float] = time.monotonic,
         web: WebFallback | None = None,
+        on_usage: Callable[[UsageEvent], None] | None = None,
     ) -> None:
+        self._on_usage = on_usage
         self._scope = scope
         self._web = web
         self._model = model
@@ -261,8 +287,10 @@ class AnswerService:
         started: float,
     ) -> AsyncGenerator[AnswerEvent, None]:
         yield AnswerEvent("meta", {"conversation_id": str(conversation.id), "mode": mode})
+        tokens = TokenUsage()
+        timing = _Timing()
 
-        standalone = await self._standalone(question, history)
+        standalone = await self._standalone(question, history, tokens)
         embedder = await self._embedder()
         async with self._scope(owner_id, role) as scope:
             hits = await scope.retrieval(embedder).search(
@@ -299,9 +327,13 @@ class AnswerService:
             )
             messages = build_answer_messages(standalone, passages, history)
             result = None
-            async with aclosing(self._generate(messages, passages, mode)) as generated_events:
+            async with aclosing(
+                self._generate(messages, passages, mode, tokens, timing)
+            ) as generated_events:
                 async for event, final in generated_events:
                     if event is not None:
+                        if timing.first_text is None and event.type in ("token", "replace"):
+                            timing.first_text = self._clock()
                         yield event
                     if final is not None:
                         result = final
@@ -310,7 +342,29 @@ class AnswerService:
         text, citations, refused, reason, verified = result
         if refused and not (generated and mode == "fast"):
             # Nothing was streamed for this text yet (fast mode already sent a replace event).
+            if timing.first_text is None:
+                timing.first_text = self._clock()
             yield AnswerEvent("token", {"text": text, "provisional": False})
+        usage = UsageEvent(
+            conversation_id=conversation.id,
+            mode=mode,
+            model=tokens.model or self._model.model_name,
+            refused=refused,
+            retrieved=len(hits),
+            top_cosine=best,
+            prompt_chars=len(standalone) + sum(len(h.text) for h in hits),
+            completion_chars=len(text),
+            latency_ms=_ms(self._clock() - started),
+            provider=tokens.provider,
+            prompt_tokens=tokens.prompt_tokens if tokens.calls else None,
+            completion_tokens=tokens.completion_tokens if tokens.calls else None,
+            token_source=("estimated" if tokens.estimated else "provider")
+            if tokens.calls
+            else None,
+            cost_usd=cost_usd(tokens, self._settings),
+            ttft_ms=_ms(timing.first_fragment - started) if timing.first_fragment else None,
+            answer_ttfb_ms=_ms(timing.first_text - started) if timing.first_text else None,
+        )
         completion = await self._persist(
             owner_id,
             role,
@@ -320,18 +374,13 @@ class AnswerService:
             citations,
             refused,
             reason,
-            usage=UsageEvent(
-                conversation_id=conversation.id,
-                mode=mode,
-                model=self._model.model_name,
-                refused=refused,
-                retrieved=len(hits),
-                top_cosine=best,
-                prompt_chars=len(standalone) + sum(len(h.text) for h in hits),
-                completion_chars=len(text),
-                latency_ms=int((self._clock() - started) * 1000),
-            ),
+            usage=usage,
         )
+        if self._on_usage is not None:
+            try:
+                self._on_usage(usage)
+            except Exception:
+                logger.warning("usage observer failed", exc_info=True)
         yield AnswerEvent(
             "done",
             {
@@ -349,13 +398,15 @@ class AnswerService:
 
     # --- steps -----------------------------------------------------------------------------
 
-    async def _standalone(self, question: str, history: list[StoredMessage]) -> str:
+    async def _standalone(
+        self, question: str, history: list[StoredMessage], tokens: TokenUsage
+    ) -> str:
         """Rewrite a follow-up into a standalone question. Falls back to the original text."""
         if not history:
             return question
         try:
             rewritten = await self._model.complete(
-                build_rewrite_messages(history, question), max_tokens=120
+                build_rewrite_messages(history, question), max_tokens=120, usage=tokens
             )
         except EkaError:
             logger.warning("question rewrite failed; using the original question", exc_info=True)
@@ -364,13 +415,21 @@ class AnswerService:
         return rewritten[:1000] if rewritten else question
 
     async def _generate(
-        self, messages: list[ChatMessage], passages: list[SearchHit], mode: AnswerMode
+        self,
+        messages: list[ChatMessage],
+        passages: list[SearchHit],
+        mode: AnswerMode,
+        tokens: TokenUsage,
+        timing: _Timing,
     ) -> AsyncGenerator[tuple[AnswerEvent | None, Outcome | None], None]:
         """Yield ``(event, None)`` while generating and ``(None, result)`` once at the end."""
         max_tokens = self._settings.max_output_tokens
         parts: list[str] = []
-        async with aclosing(self._model.stream(messages, max_tokens=max_tokens)) as stream:
+        stream_of = self._model.stream(messages, max_tokens=max_tokens, usage=tokens)
+        async with aclosing(stream_of) as stream:
             async for fragment in stream:
+                if timing.first_fragment is None:
+                    timing.first_fragment = self._clock()
                 parts.append(fragment)
                 if mode == "fast":
                     yield AnswerEvent("token", {"text": fragment, "provisional": True}), None
@@ -379,7 +438,7 @@ class AnswerService:
 
         if not verdict.ok and not verdict.declined and mode == "verified":
             retry = [*messages, ChatMessage("assistant", text), ChatMessage("user", _RETRY_NOTE)]
-            text = (await self._model.complete(retry, max_tokens=max_tokens)).strip()
+            text = (await self._model.complete(retry, max_tokens=max_tokens, usage=tokens)).strip()
             verdict = verify(text, len(passages), [p.text for p in passages])
 
         if verdict.ok:
@@ -426,6 +485,10 @@ class AnswerService:
             )
             await repo.record_usage(owner_id, usage)
             return stored
+
+
+def _ms(seconds: float) -> int:
+    return int(seconds * 1000)
 
 
 async def collect_final(events: AsyncIterator[AnswerEvent]) -> dict[str, Any]:

@@ -73,6 +73,36 @@ Tuning variables: `EKA_EDGE_CB_WINDOW`, `EKA_EDGE_CB_MIN_CALLS`, `EKA_EDGE_CB_OP
 3. Agent up but deliveries still fail: Alertmanager's log shows the HTTP status. 401 means the token in `monitoring/secrets/webhook_token` differs from `OPS_AGENT_WEBHOOK_TOKEN`.
 4. The alert resolves on its own 10 minutes after the last failed delivery.
 
+## EkaLlmFailoverBurst
+
+**Meaning:** a chat model failed (unavailable, or a timeout) before any text more than 5 times in 5 minutes, and the core moved those questions to the next model in `EKA_CHAT_FALLBACKS` (ADR-038). Users still get answers, from the fallback model, so this is a ticket, not a page.
+
+1. Which model, and why: `sum by (from_model, reason) (increase(eka_llm_failover_total[15m]))`. `breaker_open` means the primary is being skipped without a call; `unavailable` or `timeout` means it is being called and failing.
+2. Breaker state: `eka_llm_breaker_state` (0 closed, 1 half-open, 2 open). Open lasts 30 s, then 3 test calls decide.
+3. Check the provider's status page and the core log: `docker compose logs --since 15m api | grep "chat model"`. A `401` or `403` means the key is wrong or revoked; rotate it and restart the core.
+4. Watch cost: the fallback model may be priced differently (`eka:llm_cost_usd:increase1h`).
+5. If every model fails, users get `502 model-unavailable` or `504 model-timeout` and `EkaHighErrorRate` fires as well.
+
+## High token spend
+
+**Meaning:** tokens or cost are higher than usual. There is no alert for this, because a normal level depends on the deployment; check it on the Grafana panels "Model tokens per minute" and "Model cost per hour".
+
+1. Which model: `eka:llm_tokens:rate5m` and `eka:llm_cost_usd:increase1h` by model.
+2. Which users or days (admin only): `GET /api/v1/admin/usage?group_by=user` or `group_by=day`, with `from` and `to` (at most 92 days). The report has counts and timings only, never question text.
+3. A failover to a more expensive model raises cost per answer; see EkaLlmFailoverBurst.
+4. Limits: per-user rate limits at the edge, `EKA_MAX_OUTPUT_TOKENS` and `EKA_MAX_CONTEXT_CHARS` bound each answer. Cost appears only when `EKA_CHAT_PRICE_INPUT_PER_1M` and `EKA_CHAT_PRICE_OUTPUT_PER_1M` are set; with the offline model, token counts are estimates.
+
+## EkaTriageReportFailed
+
+Also covers **EkaTriageReportStuck**.
+
+**Meaning:** the triage agent accepted an alert (it answered Alertmanager with 202) but its report did not go out. `EkaTriageReportFailed`: the email failed 3 times, 5 s and 10 s apart. `EkaTriageReportStuck`: an accepted alert has had no report for 15 minutes, so the investigation is hanging. Alertmanager sends these two alerts by email itself, not through the agent. The original alert is still active in Alertmanager.
+
+1. Read the original alert in Alertmanager (http://localhost:9093) and work it from this runbook directly; do not wait for the agent.
+2. Mail problem: `docker compose logs --since 30m ops-agent | grep "sending the report failed"` shows the exception class. Check `EKA_ALERT_SMTP_HOST`, `EKA_ALERT_SMTP_PORT` and the credentials; a `MailAuthenticationException` means a wrong or revoked password.
+3. Stuck: `docker compose logs --since 30m ops-agent` for a model call that never returned. Restart the agent (`docker compose --profile agent restart ops-agent`); pending work is lost, which is why the original alert stays in Alertmanager.
+4. Counts: `eka_ops_alerts_accepted_total`, `eka_ops_reports_sent_total`, `eka_ops_reports_failed_total` and `eka_ops_reports_pending` (Prometheus, job `ops-agent`).
+
 ## Backup and restore
 
 ```bash

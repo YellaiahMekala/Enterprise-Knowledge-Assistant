@@ -195,11 +195,13 @@ class _SlowFirstToken:
 
     model_name = "slow"
 
-    async def complete(self, messages: Sequence[ChatMessage], *, max_tokens: int) -> str:
+    async def complete(
+        self, messages: Sequence[ChatMessage], *, max_tokens: int, usage: object = None
+    ) -> str:
         return GOOD
 
     async def stream(
-        self, messages: Sequence[ChatMessage], *, max_tokens: int
+        self, messages: Sequence[ChatMessage], *, max_tokens: int, usage: object = None
     ) -> AsyncGenerator[str, None]:
         await asyncio.sleep(0.25)
         for word in GOOD.split(" "):

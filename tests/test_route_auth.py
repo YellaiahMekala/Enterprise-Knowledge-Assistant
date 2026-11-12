@@ -56,6 +56,8 @@ def test_public_routes_are_exactly_the_declared_ones() -> None:
         "/api/v1/me",
         "/api/v1/admin/status",
         "/api/v1/admin/metrics",
+        "/api/v1/admin/usage",
+        "/api/v1/admin/documents",
         "/api/v1/documents",
         "/api/v1/documents/{document_id}",
         "/api/v1/search",

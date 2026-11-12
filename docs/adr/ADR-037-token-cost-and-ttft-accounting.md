@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Proposed (task P10-B) |
+| Status | Accepted (task P10-B, built 2026-11-12) |
 | Date | 2026-11-12 |
 | Decision owner | Maintainer |
 | Review trigger | A provider that returns no usage; more than about 100 distinct models or providers (label cardinality); a request for per-user budgets or quotas. |

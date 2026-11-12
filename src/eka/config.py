@@ -22,6 +22,18 @@ class ApiKeyEntry(BaseModel):
     role: Role = Role.USER
 
 
+class FallbackModel(BaseModel):
+    """One entry of EKA_CHAT_FALLBACKS (ADR-038). A key is read from the environment variable
+    named by ``api_key_env``, never written into the value itself."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    provider: Literal["fake", "openai", "bedrock"]
+    model: str = Field(min_length=1)
+    base_url: str | None = None
+    api_key_env: str | None = Field(default=None, pattern=r"^[A-Z][A-Z0-9_]*$")
+
+
 class Settings(BaseSettings):
     # hide_input_in_errors: a startup error must not echo submitted values (API-key digests,
     # a database URL that contains a password) into logs and terminals.
@@ -108,6 +120,19 @@ class Settings(BaseSettings):
     chat_api_key: SecretStr | None = None  # required when chat_provider="openai"
     chat_timeout_seconds: float = Field(default=60.0, gt=0)
     chat_retries: int = Field(default=2, ge=0, le=5)
+    # Load the embedding model at start-up and report not-ready until it has loaded (FR-52).
+    # Off only in tests that never embed.
+    ready_requires_embedder: bool = True
+    # Models to try, in order, when the primary is unavailable or times out before any text
+    # (ADR-038). JSON list; one fallback in this release.
+    chat_fallbacks: list[FallbackModel] = Field(default_factory=list, max_length=1)
+    # US dollars per million tokens for the chat model. No price is built in: when either is
+    # unset, usage events keep token counts but no cost (ADR-037).
+    chat_price_input_per_1m: float | None = Field(default=None, ge=0)
+    chat_price_output_per_1m: float | None = Field(default=None, ge=0)
+    # OTLP/HTTP collector base URL (e.g. http://jaeger:4318). Unset: no traces (NFR-07).
+    otel_endpoint: str | None = None
+    otel_sample_ratio: float = Field(default=1.0, ge=0, le=1)
     answer_mode: Literal["verified", "fast"] = "verified"
     # 0.50: no answerable question refused on either evaluation set, 20% (main) and 30%
     # (handbook) of unanswerable ones refused before the model is called. 0.55 wrongly refused
@@ -168,6 +193,8 @@ class Settings(BaseSettings):
         "reranker_model",
         "bedrock_region",
         "bedrock_endpoint_url",
+        "chat_price_input_per_1m",
+        "chat_price_output_per_1m",
         mode="before",
     )
     @classmethod
@@ -194,6 +221,27 @@ class Settings(BaseSettings):
             )
         if self.chat_provider == "bedrock" and self.chat_model is None:
             raise ValueError("EKA_CHAT_MODEL (the Bedrock model id) is required for bedrock")
+        return self
+
+    @model_validator(mode="after")
+    def _fallbacks_differ_from_the_primary(self) -> Self:
+        primary_base = self.chat_base_url if self.chat_provider == "openai" else None
+        for fallback in self.chat_fallbacks:
+            base = (
+                (fallback.base_url or self.chat_base_url) if fallback.provider == "openai" else None
+            )
+            if (fallback.provider, fallback.model, base) == (
+                self.chat_provider,
+                self.chat_model or "fake-extractive",
+                primary_base,
+            ):
+                raise ValueError(
+                    "a fallback in EKA_CHAT_FALLBACKS is the same as the primary model"
+                )
+            if fallback.provider == "openai" and not fallback.api_key_env:
+                raise ValueError(
+                    "an openai fallback needs api_key_env (the variable holding its key)"
+                )
         return self
 
     @property

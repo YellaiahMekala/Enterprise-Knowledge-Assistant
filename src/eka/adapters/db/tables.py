@@ -18,6 +18,7 @@ from sqlalchemy import (
     Index,
     Integer,
     MetaData,
+    Numeric,
     Table,
     Text,
     UniqueConstraint,
@@ -153,5 +154,12 @@ usage_events = Table(
     Column("completion_chars", Integer, nullable=False),
     Column("latency_ms", Integer, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    Column("provider", Text),
+    Column("prompt_tokens", Integer),
+    Column("completion_tokens", Integer),
+    Column("token_source", Text),
+    Column("cost_usd", Numeric(12, 6)),
+    Column("ttft_ms", Integer),
+    Column("answer_ttfb_ms", Integer),
 )
 Index("usage_events_owner_created", usage_events.c.owner_id, usage_events.c.created_at.desc())

@@ -14,6 +14,10 @@ EKA_BEDROCK_ENDPOINT_URL and the fake keys; no code changes.
 
 The stub checks that a request is SigV4-signed for the bedrock service, not that the signature is
 valid.
+
+It also answers the OpenAI-compatible ``POST /v1/chat/completions`` (streamed or not, with a usage
+block), so the failover drill (ADR-038) can bring a "fixed" OpenAI-style primary back on a port
+where nothing listened before. Any bearer token is accepted.
 """
 
 import argparse
@@ -43,6 +47,10 @@ def _messages(body: dict[str, Any]) -> list[ChatMessage]:
         text = "\n".join(part["text"] for part in turn.get("content", []) if "text" in part)
         messages.append(ChatMessage(role=turn["role"], content=text))
     return messages
+
+
+def _sse(payload: dict[str, Any]) -> bytes:
+    return f"data: {json.dumps(payload)}\n\n".encode()
 
 
 def _error(status: int, kind: str, message: str) -> JSONResponse:
@@ -125,6 +133,29 @@ def create_app() -> FastAPI:
                 "metrics": {"latencyMs": int((time.monotonic() - started) * 1000)},
             }
         )
+
+    @app.post("/v1/chat/completions")
+    async def chat_completions(request: Request) -> Response:
+        if not request.headers.get("authorization", "").startswith("Bearer "):
+            return JSONResponse({"error": {"message": "no key"}}, status_code=401)
+        body = await request.json()
+        messages = [ChatMessage(role=m["role"], content=m["content"]) for m in body["messages"]]
+        answer = await _model.complete(messages, max_tokens=int(body.get("max_tokens", 600)))
+        prompt = sum(len(m.content) for m in messages) // 4
+        usage = {"prompt_tokens": prompt, "completion_tokens": len(answer) // 4}
+        if not body.get("stream"):
+            message = {"role": "assistant", "content": answer}
+            return JSONResponse({"choices": [{"message": message}], "usage": usage})
+
+        def chunks() -> Iterator[bytes]:
+            for word in answer.split(" "):
+                chunk = {"choices": [{"delta": {"content": word + " "}}]}
+                yield _sse(chunk)
+            if body.get("stream_options", {}).get("include_usage"):
+                yield _sse({"choices": [], "usage": usage})
+            yield b"data: [DONE]\n\n"
+
+        return StreamingResponse(chunks(), media_type="text/event-stream")
 
     return app
 

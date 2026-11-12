@@ -14,6 +14,11 @@ export const routes: Routes = [
     canActivate: [signedInGuard],
     loadComponent: () => import('./documents').then((m) => m.Documents),
   },
+  {
+    path: 'admin',
+    canActivate: [signedInGuard],
+    loadComponent: () => import('./admin').then((m) => m.Admin),
+  },
   { path: '', pathMatch: 'full', redirectTo: 'chat' },
   { path: '**', redirectTo: 'chat' },
 ];

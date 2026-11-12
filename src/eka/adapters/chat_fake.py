@@ -10,7 +10,7 @@ import re
 from collections.abc import AsyncGenerator, Sequence
 
 from eka.domain.answering import INSUFFICIENT_EVIDENCE, REWRITE_MARKER
-from eka.domain.models import ChatMessage
+from eka.domain.models import ChatMessage, TokenUsage
 
 _PASSAGE = re.compile(r'<passage n="(\d+)"[^>]*>\n(.*?)\n</passage>', re.DOTALL)
 _QUESTION = re.compile(r"^Question: (.*)$", re.MULTILINE)
@@ -81,12 +81,24 @@ class FakeChatModel:
             return INSUFFICIENT_EVIDENCE
         return f"{best[1]} [{best[2]}]"
 
-    async def complete(self, messages: Sequence[ChatMessage], *, max_tokens: int) -> str:
-        return self._reply(messages)
+    def _count(self, messages: Sequence[ChatMessage], reply: str, usage: TokenUsage | None) -> None:
+        """No tokenizer here: about four characters per token, marked as an estimate."""
+        if usage is not None:
+            prompt = sum(len(m.content) for m in messages)
+            usage.add(self.model_name, "fake", -(-prompt // 4), -(-len(reply) // 4), estimated=True)
+
+    async def complete(
+        self, messages: Sequence[ChatMessage], *, max_tokens: int, usage: TokenUsage | None = None
+    ) -> str:
+        reply = self._reply(messages)
+        self._count(messages, reply, usage)
+        return reply
 
     async def stream(
-        self, messages: Sequence[ChatMessage], *, max_tokens: int
+        self, messages: Sequence[ChatMessage], *, max_tokens: int, usage: TokenUsage | None = None
     ) -> AsyncGenerator[str, None]:
-        for word in self._reply(messages).split(" "):
+        reply = self._reply(messages)
+        self._count(messages, reply, usage)
+        for word in reply.split(" "):
             await asyncio.sleep(0)
             yield word + " "

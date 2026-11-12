@@ -79,6 +79,11 @@ public class TriageService {
         }
     }
 
+    /** A report from the runbook alone, for when the investigation itself could not run. */
+    public TriageReport runbookOnly(List<Alert> alerts, String note) {
+        return fallback(alerts, 0, note);
+    }
+
     static String describe(List<Alert> alerts) {
         StringBuilder text = new StringBuilder();
         for (Alert alert : alerts) {

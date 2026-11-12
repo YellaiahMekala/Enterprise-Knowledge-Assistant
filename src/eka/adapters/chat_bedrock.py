@@ -17,7 +17,7 @@ from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError, ReadTimeoutError
 
 from eka.domain.errors import ModelTimeout, ModelUnavailable
-from eka.domain.models import ChatMessage
+from eka.domain.models import ChatMessage, TokenUsage
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +70,16 @@ class BedrockChat:
             request["system"] = system
         return request
 
-    async def complete(self, messages: Sequence[ChatMessage], *, max_tokens: int) -> str:
+    def _count(self, counts: Any, usage: TokenUsage | None) -> None:
+        if usage is None or not isinstance(counts, dict):
+            return
+        prompt, completion = counts.get("inputTokens"), counts.get("outputTokens")
+        if isinstance(prompt, int) and isinstance(completion, int):
+            usage.add(self.model_name, "bedrock", prompt, completion)
+
+    async def complete(
+        self, messages: Sequence[ChatMessage], *, max_tokens: int, usage: TokenUsage | None = None
+    ) -> str:
         request = self._request(messages, max_tokens)
         try:
             response = await asyncio.to_thread(self._client.converse, **request)
@@ -81,10 +90,11 @@ class BedrockChat:
             text = "".join(part["text"] for part in parts if "text" in part)
         except (KeyError, TypeError) as error:
             raise ModelUnavailable("chat model returned an unexpected reply") from error
+        self._count(response.get("usage"), usage)
         return text
 
     async def stream(
-        self, messages: Sequence[ChatMessage], *, max_tokens: int
+        self, messages: Sequence[ChatMessage], *, max_tokens: int, usage: TokenUsage | None = None
     ) -> AsyncGenerator[str, None]:
         request = self._request(messages, max_tokens)
         try:
@@ -97,6 +107,9 @@ class BedrockChat:
                 event: Any = await asyncio.to_thread(next, events, _END)
                 if event is _END:
                     return
+                if "metadata" in event:
+                    self._count(event["metadata"].get("usage"), usage)
+                    continue
                 delta = event.get("contentBlockDelta", {}).get("delta", {})
                 text = delta.get("text")
                 if isinstance(text, str) and text:

@@ -8,6 +8,9 @@ document is ready, so a worker must be running. Each answer is one JSON line; th
 printed. Which model answers is whatever the API is configured with: this tool never calls a
 model itself.
 
+With EKA_RUN_ADMIN_KEY also set (an admin key), the tool then prints the run's tokens, cost and
+time-to-first-token percentiles from the admin usage report (ADR-037).
+
 Scores are mechanical: "fact found" is a case-insensitive string match of the gold text, so a
 correct paraphrase counts as a miss and has to be read by a person.
 """
@@ -19,6 +22,7 @@ import sys
 import time
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -113,6 +117,29 @@ def summarise(answers: Iterable[Answer]) -> dict[str, Any]:
     }
 
 
+def usage_summary(client: httpx.Client, start: datetime, end: datetime) -> dict[str, Any]:
+    """Tokens, cost and first-token times for the run window, per user, from the usage report."""
+    response = client.get(
+        "/api/v1/admin/usage",
+        params={"group_by": "user", "from": start.isoformat(), "to": end.isoformat()},
+    )
+    response.raise_for_status()
+    rows = response.json()["rows"]
+    requests = sum(r["requests"] for r in rows)
+    costs = [r["cost_usd"] for r in rows if r["cost_usd"] is not None]
+    cost = sum(costs) if costs else None
+    return {
+        "requests": requests,
+        "prompt_tokens": sum(r["prompt_tokens"] or 0 for r in rows),
+        "completion_tokens": sum(r["completion_tokens"] or 0 for r in rows),
+        "cost_usd": round(cost, 6) if cost is not None else None,
+        "cost_per_100_questions_usd": (
+            round(cost * 100 / requests, 4) if cost is not None and requests else None
+        ),
+        "per_user": rows,  # p50 and p95 latency and time to first token per user
+    }
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m eka.tools.answer_run", description=__doc__)
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
@@ -137,12 +164,19 @@ def main(argv: list[str] | None = None) -> int:
         items = [i for i in items if i["id"] in set(args.only)]
     with httpx.Client(base_url=args.base_url, headers={"X-API-Key": key}, timeout=120) as client:
         upload_corpus(client, args.corpus, args.ingest_timeout)
+        started = datetime.now(UTC)
         answers = [ask(client, item, args.mode) for item in items]
+        ended = datetime.now(UTC) + timedelta(seconds=1)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with args.out.open("w", encoding="utf-8") as out:
         for answer in answers:
             out.write(json.dumps(asdict(answer)) + "\n")
     print(json.dumps(summarise(answers), indent=2))
+    admin_key = os.environ.get("EKA_RUN_ADMIN_KEY")
+    if admin_key:
+        headers = {"X-API-Key": admin_key}
+        with httpx.Client(base_url=args.base_url, headers=headers, timeout=60) as admin:
+            print(json.dumps({"usage": usage_summary(admin, started, ended)}, indent=2))
     return 0
 
 

@@ -27,6 +27,7 @@ from eka.domain.models import (
     NewDocument,
     SearchFilters,
     StoredMessage,
+    TokenUsage,
     UsageEvent,
 )
 
@@ -462,20 +463,27 @@ class ScriptedChatModel:
     def _next(replies: list[str]) -> str:
         return replies.pop(0) if len(replies) > 1 else (replies[0] if replies else "")
 
-    async def complete(self, messages: Sequence[ChatMessage], *, max_tokens: int) -> str:
+    async def complete(
+        self, messages: Sequence[ChatMessage], *, max_tokens: int, usage: TokenUsage | None = None
+    ) -> str:
         self.complete_calls.append(list(messages))
         if self._complete_error is not None:
             raise self._complete_error
-        return self._next(self._complete_replies)
+        reply = self._next(self._complete_replies)
+        if usage is not None:  # 100 prompt tokens and one per word, as a provider would report
+            usage.add(self.model_name, "scripted", 100, len(reply.split()))
+        return reply
 
     async def stream(
-        self, messages: Sequence[ChatMessage], *, max_tokens: int
+        self, messages: Sequence[ChatMessage], *, max_tokens: int, usage: TokenUsage | None = None
     ) -> AsyncGenerator[str, None]:
         self.stream_calls.append(list(messages))
         try:
             if self._stream_error is not None:
                 raise self._stream_error
             reply = self._next(self._stream_replies)
+            if usage is not None:
+                usage.add(self.model_name, "scripted", 100, len(reply.split()))
             for word in reply.split(" "):
                 await asyncio.sleep(0)
                 yield word + " "

@@ -25,7 +25,7 @@ ALLOWED_EKA = {
     "security": {"domain"},
     "api": {"services", "domain", "security"},
 }
-SHARED_TOP_LEVEL = {"config", "request_context", "logging_config", "metrics"}
+SHARED_TOP_LEVEL = {"config", "request_context", "logging_config", "metrics", "tracing"}
 # Packages that may use third-party libraries. domain, ports and services may not.
 THIRD_PARTY_OK = {"adapters", "api", "security", "ingestion"}
 # Third-party libraries each of those may use is deliberately not narrowed further yet.

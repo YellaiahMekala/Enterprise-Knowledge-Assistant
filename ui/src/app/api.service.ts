@@ -1,7 +1,16 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
-import { ChatRequest, Citation, Conversation, DocumentItem, Message, Problem } from './models';
+import {
+  ChatRequest,
+  Citation,
+  Conversation,
+  DocumentCounts,
+  DocumentItem,
+  Message,
+  Problem,
+  UsageReport,
+} from './models';
 import { SessionService } from './session.service';
 import { OidcClient } from './oidc';
 import { SseEvent, parseSse } from './sse';
@@ -32,6 +41,19 @@ export class ApiService {
 
   me() {
     return this.http.get<{ user_id: string; role: string }>('/api/v1/me');
+  }
+
+  /** Admin only (403 otherwise): usage by user or by UTC day over the last `days` days. */
+  adminUsage(groupBy: 'user' | 'day', days: number): Observable<UsageReport> {
+    const to = new Date();
+    const from = new Date(to.getTime() - days * 86_400_000);
+    return this.http.get<UsageReport>('/api/v1/admin/usage', {
+      params: { group_by: groupBy, from: from.toISOString(), to: to.toISOString() },
+    });
+  }
+
+  adminDocuments(): Observable<DocumentCounts> {
+    return this.http.get<DocumentCounts>('/api/v1/admin/documents');
   }
 
   documents(): Observable<{ items: DocumentItem[] }> {

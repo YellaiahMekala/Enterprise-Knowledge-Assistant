@@ -16,6 +16,16 @@ groups:
       - record: eka:search_latency_p95:5m
         expr: histogram_quantile(0.95, sum by (le) (rate(eka_http_request_duration_seconds_bucket{route="/api/v1/search"}[5m])))
 
+  # Model usage (ADR-037). By provider and model only; per-user figures are in the admin usage report.
+  - name: eka-llm
+    rules:
+      - record: eka:llm_ttft_seconds:p95
+        expr: histogram_quantile(0.95, sum by (le, provider, model) (rate(eka_llm_ttft_seconds_bucket[5m])))
+      - record: eka:llm_tokens:rate5m
+        expr: sum by (provider, model, kind) (rate(eka_llm_tokens_total[5m]))
+      - record: eka:llm_cost_usd:increase1h
+        expr: sum by (provider, model) (increase(eka_llm_cost_usd_total[1h]))
+
   - name: eka-alerts
     rules:
       # 14.4x the error budget (0.5%) burns 2% of a 30-day budget in an hour.
@@ -59,3 +69,29 @@ groups:
         annotations:
           summary: "Alertmanager cannot deliver alerts to the triage agent; open http://localhost:9093 for the active alerts"
           runbook: "docs/runbooks.md#ekaalertdeliveryfailing"
+
+      # Failover hides a provider outage from users; this makes sure a person still hears of it.
+      - alert: EkaLlmFailoverBurst
+        expr: sum by (from_model) (increase(eka_llm_failover_total[5m])) > 5
+        labels: {severity: ticket}
+        annotations:
+          summary: "Chat model {{ $labels.from_model }} failed over more than 5 times in 5 minutes"
+          runbook: "docs/runbooks.md#ekallmfailoverburst"
+
+      # The agent accepted an alert but could not email the report after 3 tries (P11). Routed
+      # straight to email by Alertmanager, like EkaAlertDeliveryFailing.
+      - alert: EkaTriageReportFailed
+        expr: increase(eka_ops_reports_failed_total[30m]) > 0
+        labels: {severity: page}
+        annotations:
+          summary: "The triage agent accepted an alert but could not send its report"
+          runbook: "docs/runbooks.md#ekatriagereportfailed"
+
+      # An accepted alert still has no report after 15 minutes: the investigation is stuck.
+      - alert: EkaTriageReportStuck
+        expr: max(eka_ops_reports_pending) > 0
+        for: 15m
+        labels: {severity: page}
+        annotations:
+          summary: "An alert accepted by the triage agent has had no report for 15 minutes"
+          runbook: "docs/runbooks.md#ekatriagereportfailed"

@@ -29,3 +29,9 @@ scrape_configs:
   - job_name: alertmanager
     static_configs:
       - targets: ['alertmanager:9093']
+
+  # The triage agent's delivery counts (profile "agent"): accepted alerts, sent and failed reports.
+  - job_name: ops-agent
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['ops-agent:8090']

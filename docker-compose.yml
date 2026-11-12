@@ -90,6 +90,8 @@ services:
       EKA_DATABASE_URL: postgresql+psycopg://eka:${EKA_DB_PASSWORD}@db:5432/eka
       EKA_AUTH_MODE: gateway
       EKA_GATEWAY_JWKS_URL: http://edge:8081/actuator/jwks
+      # Traces (NFR-07): set EKA_OTEL_ENDPOINT=http://jaeger:4318 in .env with the monitoring profile.
+      EKA_OTEL_ENDPOINT: ${EKA_OTEL_ENDPOINT:-}
       # Optional web fallback (ADR-030), off unless set in .env.
       EKA_WEB_FALLBACK_ENABLED: ${EKA_WEB_FALLBACK_ENABLED:-false}
       EKA_WEB_ALLOWED_HOSTS: ${EKA_WEB_ALLOWED_HOSTS:-[]}
@@ -114,6 +116,9 @@ services:
       EKA_EDGE_OIDC_AUDIENCE: ${EKA_EDGE_OIDC_AUDIENCE:-eka-api}
       EKA_EDGE_SIGNING_KEY_FILE: ${EKA_EDGE_SIGNING_KEY_FILE:-}
       EKA_EDGE_EPHEMERAL_KEY: ${EKA_EDGE_EPHEMERAL_KEY:-true}
+      # Set EKA_EDGE_OTEL_ENABLED=true and the endpoint to http://jaeger:4318/v1/traces for traces.
+      EKA_EDGE_OTEL_ENABLED: ${EKA_EDGE_OTEL_ENABLED:-false}
+      EKA_EDGE_OTEL_ENDPOINT: ${EKA_EDGE_OTEL_ENDPOINT:-http://jaeger:4318/v1/traces}
 
   # Identity provider profile: `docker compose --profile idp up -d keycloak`. Imports the eka realm
   # (keycloak/realm-eka.json) with two test users. Passwords come from .env, not from the file.
@@ -165,6 +170,14 @@ services:
   # The socket gives Alloy full control of Docker on this machine (":ro" does not limit the API),
   # which is acceptable for a local stack only; on AWS, logs go to CloudWatch through the task's
   # log driver instead.
+  # Trace viewer (NFR-07): UI on 16686, OTLP/HTTP in on 4318. In-memory, so traces vanish on restart.
+  jaeger:
+    mem_limit: 512m
+    profiles: [monitoring]
+    image: jaegertracing/all-in-one:1.76.0
+    ports:
+      - "127.0.0.1:16686:16686"
+
   loki:
     mem_limit: 512m
     profiles: [monitoring]

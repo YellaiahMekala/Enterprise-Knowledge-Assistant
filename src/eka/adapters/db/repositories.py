@@ -19,6 +19,7 @@ from eka.domain.models import (
     NewDocument,
     StoredMessage,
     UsageEvent,
+    UsageRow,
 )
 
 
@@ -274,5 +275,79 @@ class SqlConversationRepository:
                 prompt_chars=event.prompt_chars,
                 completion_chars=event.completion_chars,
                 latency_ms=event.latency_ms,
+                provider=event.provider,
+                prompt_tokens=event.prompt_tokens,
+                completion_tokens=event.completion_tokens,
+                token_source=event.token_source,
+                cost_usd=event.cost_usd,
+                ttft_ms=event.ttft_ms,
+                answer_ttfb_ms=event.answer_ttfb_ms,
             )
         )
+
+
+class SqlUsageReport:
+    """Usage summed by user or by day. Needs a session opened with the admin role, whose
+    row-level policy may read every owner's usage events."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def summary(self, group_by: str, start: datetime, end: datetime) -> list[UsageRow]:
+        if group_by == "user":
+            key: Any = usage_events.c.owner_id
+        else:
+            key = func.to_char(
+                func.date_trunc("day", func.timezone("UTC", usage_events.c.created_at)),
+                "YYYY-MM-DD",
+            )
+        u = usage_events.c
+
+        def pct(fraction: float, column: Any) -> Any:
+            return func.percentile_cont(fraction).within_group(column)
+
+        query = (
+            select(
+                key.label("key"),
+                func.count().label("requests"),
+                func.count().filter(u.refused).label("refused"),
+                func.sum(u.prompt_tokens).label("prompt_tokens"),
+                func.sum(u.completion_tokens).label("completion_tokens"),
+                func.sum(u.cost_usd).label("cost_usd"),
+                pct(0.5, u.latency_ms).label("latency_p50"),
+                pct(0.95, u.latency_ms).label("latency_p95"),
+                pct(0.5, u.ttft_ms).label("ttft_p50"),
+                pct(0.95, u.ttft_ms).label("ttft_p95"),
+            )
+            .where(u.created_at >= start, u.created_at < end)
+            .group_by(key)
+            .order_by(key)
+        )
+        rows = (await self._session.execute(query)).mappings()
+        return [
+            UsageRow(
+                key=str(row["key"]),
+                requests=int(row["requests"]),
+                refused=int(row["refused"]),
+                prompt_tokens=_int_or_none(row["prompt_tokens"]),
+                completion_tokens=_int_or_none(row["completion_tokens"]),
+                cost_usd=float(row["cost_usd"]) if row["cost_usd"] is not None else None,
+                latency_p50_ms=_int_or_none(row["latency_p50"]),
+                latency_p95_ms=_int_or_none(row["latency_p95"]),
+                ttft_p50_ms=_int_or_none(row["ttft_p50"]),
+                ttft_p95_ms=_int_or_none(row["ttft_p95"]),
+            )
+            for row in rows
+        ]
+
+
+async def document_status_counts(session: AsyncSession) -> dict[str, int]:
+    """Documents of every owner by status; needs a session opened with the admin role."""
+    rows = await session.execute(
+        select(documents.c.status, func.count()).group_by(documents.c.status)
+    )
+    return {str(status): int(count) for status, count in rows.all()}
+
+
+def _int_or_none(value: Any) -> int | None:
+    return None if value is None else round(float(value))

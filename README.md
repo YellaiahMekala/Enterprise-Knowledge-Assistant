@@ -135,14 +135,19 @@ The 44 questions and 10 challenge questions through `POST /api/v1/chat`, verifie
 
 Equal scores are expected: the stand-in answers with the same offline model. The table shows that requests are signed, sent, parsed (including the event stream) and scored end to end; it says nothing about model quality. For the real comparison, set `EKA_CHAT_PROVIDER=bedrock`, the model id and the region, leave `EKA_BEDROCK_ENDPOINT_URL` empty and use real AWS credentials. No code changes.
 
+### Added in P10 to P12
+
+- **Token, cost and time to first token** (ADR-037): real provider token counts, cost from configured per-million prices (empty when none), TTFT, `eka_llm_*` series without user labels, admin usage report and an Admin page in the UI.
+- **Model fallback** (ADR-038): `EKA_CHAT_FALLBACKS` (one fallback), a per-model circuit breaker, failover only before the first text; alert `EkaLlmFailoverBurst`.
+- **Agent delivery tracking**: retries, sent/failed/pending counters, alerts `EkaTriageReportFailed` and `EkaTriageReportStuck`; drilled with a failing mail server.
+- **Readiness** waits for the embedding model; **traces** (NFR-07): set `EKA_OTEL_ENDPOINT` (core) and `EKA_EDGE_OTEL_ENABLED=true` (edge); `docker compose --profile monitoring up -d jaeger`, UI on 16686. Spans never carry text, keys or user ids. A trace continuing a supplied `traceparent` was seen in Jaeger from the core; the full edge-to-database trace is not yet verified.
+
 ### Not done
 
 | Item | Note |
 |---|---|
 | Reranking on by default | Needs a larger evaluation set than 13 chunks (see ADR-032) |
 | Live rerun after the q31/q29 fixes | Fixes checked with the offline model only; a `gpt-4o-mini` rerun (cents) needs approval |
-| Token, cost and time-to-first-token accounting | Planned (phase P10, [ADR-037](docs/adr/ADR-037-token-cost-and-ttft-accounting.md), FR-53). Usage events hold sizes in characters only; provider token counts are discarded and first-token time is not measured |
-| Model fallback chain with a circuit breaker | Planned (phase P10, [ADR-038](docs/adr/ADR-038-model-fallback-chain-and-breaker.md), FR-54). Each adapter retries with backoff, but a provider outage is still a 502 because nothing fails over to a second model |
 | Full hand scoring of live answers | Only the misses were read (see above) |
 | Other models and the real cross-provider table | Only `gpt-4o-mini` was run live; the comparison pipeline is ready and needs Bedrock access (an AWS account and approval of the spend) |
 | Entra ID or other hosted identity provider | Tested against Keycloak only |

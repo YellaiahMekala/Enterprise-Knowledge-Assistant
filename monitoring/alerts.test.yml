@@ -95,3 +95,82 @@ tests:
       - eval_time: 20m
         alertname: EkaAlertDeliveryFailing
         exp_alerts: []
+
+  - name: time to first token p95 and token rate are recorded by provider and model
+    interval: 1m
+    input_series:
+      # 100 answers a minute: 90 with a first token under 1 s, 10 between 2 and 3 s.
+      - series: 'eka_llm_ttft_seconds_bucket{provider="openai",model="gpt-x",mode="verified",le="1"}'
+        values: '0+90x10'
+      - series: 'eka_llm_ttft_seconds_bucket{provider="openai",model="gpt-x",mode="verified",le="2"}'
+        values: '0+90x10'
+      - series: 'eka_llm_ttft_seconds_bucket{provider="openai",model="gpt-x",mode="verified",le="3"}'
+        values: '0+100x10'
+      - series: 'eka_llm_ttft_seconds_bucket{provider="openai",model="gpt-x",mode="verified",le="+Inf"}'
+        values: '0+100x10'
+      - series: 'eka_llm_tokens_total{provider="openai",model="gpt-x",kind="prompt"}'
+        values: '0+6000x10'
+    promql_expr_test:
+      - expr: eka:llm_ttft_seconds:p95
+        eval_time: 10m
+        exp_samples:
+          - labels: 'eka:llm_ttft_seconds:p95{provider="openai",model="gpt-x"}'
+            value: 2.499999999999999  # 2.5 in floating point (interpolated between the 2 s and 3 s buckets)
+      - expr: eka:llm_tokens:rate5m
+        eval_time: 10m
+        exp_samples:
+          - labels: 'eka:llm_tokens:rate5m{provider="openai",model="gpt-x",kind="prompt"}'
+            value: 100
+
+  - name: a burst of failovers raises a ticket, a single one does not
+    interval: 1m
+    input_series:
+      - series: 'eka_llm_failover_total{from_model="gpt-4o-mini",to_model="claude",reason="unavailable"}'
+        values: '0 0 0 2 4 6 8 10 12 14 16 18'
+      - series: 'eka_llm_failover_total{from_model="other",to_model="claude",reason="timeout"}'
+        values: '0 1 1 1 1 1 1 1 1 1 1 1'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: EkaLlmFailoverBurst
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: EkaLlmFailoverBurst
+        exp_alerts:
+          - exp_labels: {severity: ticket, from_model: gpt-4o-mini}
+            exp_annotations:
+              summary: "Chat model gpt-4o-mini failed over more than 5 times in 5 minutes"
+              runbook: "docs/runbooks.md#ekallmfailoverburst"
+
+  - name: a report that could not be sent pages; a sent one does not
+    interval: 1m
+    input_series:
+      - series: 'eka_ops_reports_failed_total{job="ops-agent"}'
+        values: '0 0 0 1 1 1 1 1 1 1'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: EkaTriageReportFailed
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: EkaTriageReportFailed
+        exp_alerts:
+          - exp_labels: {severity: page, job: ops-agent}
+            exp_annotations:
+              summary: "The triage agent accepted an alert but could not send its report"
+              runbook: "docs/runbooks.md#ekatriagereportfailed"
+
+  - name: a batch pending for 15 minutes pages; a short investigation does not
+    interval: 1m
+    input_series:
+      - series: 'eka_ops_reports_pending{job="ops-agent"}'
+        values: '0 1 1 0 0 1x20'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: EkaTriageReportStuck
+        exp_alerts: []
+      - eval_time: 22m
+        alertname: EkaTriageReportStuck
+        exp_alerts:
+          - exp_labels: {severity: page}
+            exp_annotations:
+              summary: "An alert accepted by the triage agent has had no report for 15 minutes"
+              runbook: "docs/runbooks.md#ekatriagereportfailed"

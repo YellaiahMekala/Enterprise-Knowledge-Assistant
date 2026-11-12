@@ -116,3 +116,21 @@ def test_endpoint_setting_is_optional_and_empty_means_real_aws() -> None:
         make_settings(bedrock_endpoint_url="http://127.0.0.1:8765").bedrock_endpoint_url
         == "http://127.0.0.1:8765"
     )
+
+
+@pytest.mark.anyio
+async def test_the_openai_route_streams_with_usage_through_the_real_adapter(
+    stub_url: str,
+) -> None:
+    from eka.adapters.chat_openai import OpenAICompatibleChat
+    from eka.domain.models import TokenUsage
+
+    model = OpenAICompatibleChat(
+        base_url=stub_url + "/v1", api_key="drill", model="stub", timeout_seconds=5, retries=0
+    )
+    usage = TokenUsage()
+    text = "".join([f async for f in model.stream(PROMPT, max_tokens=100, usage=usage)])
+    assert "24 days" in text and "[1]" in text
+    assert usage.prompt_tokens > 0 and usage.provider == "openai"
+    assert "[1]" in await model.complete(PROMPT, max_tokens=100)
+    await model.aclose()

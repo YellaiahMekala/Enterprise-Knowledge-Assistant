@@ -40,6 +40,10 @@ class Database:
         )
         self._sessions = async_sessionmaker(self._engine, expire_on_commit=False)
 
+    @property
+    def engine(self) -> AsyncEngine:
+        return self._engine
+
     async def ping(self) -> None:
         """Raises if the database cannot be reached."""
         async with self._engine.connect() as connection:
