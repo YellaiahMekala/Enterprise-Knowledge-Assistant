@@ -104,7 +104,31 @@ Both defects were then traced and fixed (2026-11-11), and checked again with the
 - **q29 (wrong citation).** Retrieval was right (`incident_response.md` was passage 1); the model cited passage 2. The check only tested that citation numbers exist. A word-overlap check now rejects a citation when the cited passage covers less than half of the sentence's content words and another passage covers at least half and twice as many. In verified mode the model is asked once more, otherwise the answer is withheld as unverified ([`grounding.py`](src/eka/services/grounding.py)).
 - End-to-end rerun through the API (`python -m eka.tools.answer_run`, fake extractive model, real embeddings and database): q31 answered, q29 cites `incident_response.md`, and the new check rejected none of the 44 answers. This shows the check does not reject plain extractive answers; it does not show how often it catches or wrongly rejects a real model's paraphrases.
 
+**Rerun after the fixes (2026-11-13, P10-A).** Same 44 questions plus the 10 challenge questions, same 13 documents, `gpt-4o-mini`, verified mode, gate 0.50 and the citation check on:
+
+| Check | First run (2026-11-10) | Rerun (2026-11-13) |
+|---|---|---|
+| Expected fact, by string match | 36 of 44 | 36 of 44 |
+| Expected fact, after reading every miss | 43 of 44 | 44 of 44 (all 8 misses were correct paraphrases, e.g. "200 milliseconds" for `INITIAL_DELAY_MS = 200`) |
+| Expected document among the citations | 42 of 44 | 44 of 44 |
+| Wrong refusals | 1 (q31) | 0 (q31: "within 5 business days", cites `incident_response.md`) |
+| Wrong citations | 1 (q29) | 0 (q29 cites `incident_response.md`) |
+| Challenge (unanswerable) questions refused | not run | 10 of 10 (by the gate or the model's own `INSUFFICIENT_EVIDENCE`) |
+| Latency, whole request | median 3.3 s | median 1.3 s (p50 1.1 s, p95 2.0 s from the usage report) |
+| Time to first token (provider) | not measured | p50 851 ms, p95 1,248 ms |
+| Tokens and cost, 54 requests | not recorded | 47,156 prompt + 913 completion tokens, 0.0076 USD (about 0.014 USD per 100 questions at 0.15 / 0.60 USD per million tokens; prices configured for the run, not built in) |
+
+Both fixes hold with the real model and nothing that was right before went wrong. Still one run with one model on a small set; the latency gap between the two runs is network and provider variance, not a code change.
+
 I read the 8 string-match misses, the refusal and the wrong citation. I did not read the other 36 answers, so the 43 of 44 figure is not a full hand score. Token counts are not returned by the API and were not recorded. One run, one model, questions written by the author: a sanity check, not a benchmark.
+
+**Triage agent, live run with log search (2026-11-13, P11).** Compose stack (core, worker, Prometheus, Alertmanager, Loki and Alloy, agent, mail catcher), `gpt-4o-mini`, a real fault: the database stopped for about a minute.
+
+- Two reports were emailed, 0 failed (agent counters: 2 accepted, 2 sent, 0 failed, 0 pending).
+- `EkaTargetDown` went the whole real path, Prometheus to Alertmanager to agent to email (the edge was not running). Tool calls: runbook, serviceHealth, `searchLogs` for core and for edge.
+- `EkaHighErrorRate` was posted by hand. Tool calls: runbook, serviceHealth, PromQL, `searchLogs`. The report named the database as the likely cause from the real `/health/ready` 503.
+- **Gap found.** Every `searchLogs` call asked for `ERROR` and got no lines, because the core logs database failures at WARNING level; Loki held 22 matching warning lines. The report was right from health and metrics, not from logs. Not tuned after the fact; listed under "Not done".
+- An earlier attempt with the agent pointed at the edge-profile core name reported the core "unreachable", a wrong diagnosis caused by the test setup, not the code.
 
 Triage agent with `gpt-4o-mini`, one synthetic `EkaHighErrorRate` alert, mail to the local catcher: the agent made 3 read-only calls (runbook, service health, one PromQL query) and sent a report in about 11 s. The core and edge were not running in that test, so the tools correctly reported them unreachable; the report's guess of "database issues" was the model's own and wrong (the database was up), which is why the report says to check the evidence before acting. One run; real email delivery was not tested.
 
@@ -147,7 +171,7 @@ Equal scores are expected: the stand-in answers with the same offline model. The
 | Item | Note |
 |---|---|
 | Reranking on by default | Needs a larger evaluation set than 13 chunks (see ADR-032) |
-| Live rerun after the q31/q29 fixes | Fixes checked with the offline model only; a `gpt-4o-mini` rerun (cents) needs approval |
+| Triage log search misses WARNING lines | The model filters `searchLogs` on `ERROR`; database failures log at WARNING, so the live run found no log lines. Options: log dependency failures at ERROR, or let the tool match WARNING too |
 | Full hand scoring of live answers | Only the misses were read (see above) |
 | Other models and the real cross-provider table | Only `gpt-4o-mini` was run live; the comparison pipeline is ready and needs Bedrock access (an AWS account and approval of the spend) |
 | Entra ID or other hosted identity provider | Tested against Keycloak only |
