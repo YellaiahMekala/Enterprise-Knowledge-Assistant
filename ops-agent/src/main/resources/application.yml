@@ -28,6 +28,11 @@ ops:
   edge-management-url: ${OPS_AGENT_EDGE_MANAGEMENT_URL:http://edge:8081}
   # Empty: the searchLogs tool answers that no log store is configured.
   loki-url: ${OPS_AGENT_LOKI_URL:}
+  # Set the log group (for example /eka, the Terraform output log_group) to search CloudWatch Logs
+  # instead of Loki. Region and credentials come from the AWS default chain.
+  cloudwatch:
+    log-group: ${OPS_AGENT_CLOUDWATCH_LOG_GROUP:}
+    endpoint-url: ${OPS_AGENT_CLOUDWATCH_ENDPOINT_URL:}
   runbook-file: ${OPS_AGENT_RUNBOOK_FILE:/app/runbooks.md}
   max-tool-calls: ${OPS_AGENT_MAX_TOOL_CALLS:5}
   mail:

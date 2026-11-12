@@ -1,22 +1,14 @@
 package com.eka.ops.tools;
 
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import java.util.regex.Pattern;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Searches recent container logs in Loki. The model never writes LogQL: it picks a service from a
- * fixed list, a plain text to look for and a time window, and the query is built here. Results are
- * cut to a few short lines, and values that look like credentials are masked before the model or
- * the report sees them.
+ * Searches recent logs. The model never writes a query: it picks a service from a fixed list, a
+ * plain text to look for and a time window, and the store (Loki or CloudWatch Logs) builds the
+ * query from those checked parts. Results are cut to a few short lines, and values that look like
+ * credentials are masked before the model or the report sees them.
  */
 public class LogSearch {
 
@@ -27,19 +19,21 @@ public class LogSearch {
     static final int MAX_LINES = 20;
     static final int MAX_LINE_CHARS = 300;
 
-    // No quotes, backslashes or backticks, so the text cannot end the LogQL string it goes into.
+    // No quotes, backslashes or backticks, so the text cannot end the query string it goes into.
     private static final Pattern TEXT = Pattern.compile("[A-Za-z0-9 _.:/=@#%+\\-\\[\\]()]*");
     private static final Pattern SECRET = Pattern.compile(
             "(?i)(api[_-]?key|x-api-key|authorization|password|passwd|secret|token)"
                     + "(\"?\\s*[:=]\\s*\"?)(bearer\\s+)?[^\\s\"',}]+");
-    private static final JsonMapper JSON = JsonMapper.builder().build();
 
-    private final ReadOnlyHttp http;
-    private final String lokiUrl;
+    private final LogStore store;
 
+    public LogSearch(LogStore store) {
+        this.store = store;
+    }
+
+    /** Loki, the store on the Compose stack. */
     public LogSearch(ReadOnlyHttp http, String lokiUrl) {
-        this.http = http;
-        this.lokiUrl = lokiUrl;
+        this(new LokiLogStore(http, lokiUrl));
     }
 
     /** Returns null when the arguments are acceptable, otherwise the reason they are not. */
@@ -59,11 +53,6 @@ public class LogSearch {
         return null;
     }
 
-    static String logQl(String service, String text) {
-        String selector = "{service=\"" + service + "\"}";
-        return text == null || text.isBlank() ? selector : selector + " |= \"" + text.strip() + "\"";
-    }
-
     static String redact(String line) {
         return SECRET.matcher(line).replaceAll("$1$2$3***");
     }
@@ -73,54 +62,24 @@ public class LogSearch {
         if (problem != null) {
             return "rejected: " + problem;
         }
-        String query = logQl(service, text);
-        ReadOnlyHttp.Reply reply = http.fetch(
-                lokiUrl,
-                "/loki/api/v1/query_range?query=" + URLEncoder.encode(query, StandardCharsets.UTF_8)
-                        + "&since=" + minutes + "m&limit=" + MAX_LINES + "&direction=backward");
-        if (!reply.ok()) {
-            String body = reply.body();
-            return reply.status() < 0
-                    ? body
-                    : "HTTP " + reply.status() + " " + body.substring(0, Math.min(300, body.length()));
-        }
-        List<Entry> lines;
+        String query = store.describe(service, text);
+        List<LogStore.Line> lines;
         try {
-            lines = parse(reply.body());
-        } catch (RuntimeException e) {
-            return "the log store returned an answer that could not be read";
+            lines = store.newest(service, text, minutes, MAX_LINES);
+        } catch (LogStore.LogStoreException e) {
+            return e.getMessage();
         }
         if (lines.isEmpty()) {
             return "no log lines for " + query + " in the last " + minutes + " minutes";
         }
         StringBuilder out = new StringBuilder(lines.size() + " newest line(s) for " + query + ":\n");
-        for (Entry entry : lines) {
-            String shown = redact(entry.line().strip());
+        for (LogStore.Line line : lines) {
+            String shown = redact(line.text().strip());
             if (shown.length() > MAX_LINE_CHARS) {
                 shown = shown.substring(0, MAX_LINE_CHARS) + "...";
             }
-            out.append(entry.time()).append(' ').append(shown).append('\n');
+            out.append(line.time()).append(' ').append(shown).append('\n');
         }
         return out.toString();
-    }
-
-    private record Entry(long nanos, String line) {
-        String time() {
-            return Instant.ofEpochSecond(nanos / 1_000_000_000L, nanos % 1_000_000_000L)
-                    .truncatedTo(ChronoUnit.SECONDS)
-                    .toString();
-        }
-    }
-
-    /** Lines from every stream, newest first, at most MAX_LINES. */
-    private static List<Entry> parse(String body) {
-        List<Entry> entries = new ArrayList<>();
-        for (JsonNode stream : JSON.readTree(body).path("data").path("result")) {
-            for (JsonNode value : stream.path("values")) {
-                entries.add(new Entry(Long.parseLong(value.get(0).asString()), value.get(1).asString()));
-            }
-        }
-        entries.sort(Comparator.comparingLong(Entry::nanos).reversed());
-        return entries.stream().limit(MAX_LINES).toList();
     }
 }

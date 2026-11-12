@@ -3,6 +3,8 @@ package com.eka.ops.triage;
 import com.eka.ops.alert.AlertmanagerPayload.Alert;
 import com.eka.ops.config.OpsProperties;
 import com.eka.ops.tools.LogSearch;
+import com.eka.ops.tools.LogStore;
+import com.eka.ops.tools.LokiLogStore;
 import com.eka.ops.tools.OpsTools;
 import com.eka.ops.tools.ReadOnlyHttp;
 import com.eka.ops.tools.RunbookReader;
@@ -26,26 +28,39 @@ public class TriageService {
     private final ChatModel model;
     private final ReadOnlyHttp http;
     private final RunbookReader runbooks;
+    private final LogStore logs;
 
+    /** Loki when a URL is configured, else no log search. */
     public TriageService(OpsProperties properties, ChatModel model, ReadOnlyHttp http, RunbookReader runbooks) {
+        this(properties, model, http, runbooks, lokiOrNull(properties, http));
+    }
+
+    /** {@code logs} may be null: the searchLogs tool then says it is not configured. */
+    public TriageService(
+            OpsProperties properties, ChatModel model, ReadOnlyHttp http, RunbookReader runbooks, LogStore logs) {
         this.properties = properties;
         this.model = model;
         this.http = http;
         this.runbooks = runbooks;
+        this.logs = logs;
+    }
+
+    private static LogStore lokiOrNull(OpsProperties properties, ReadOnlyHttp http) {
+        String url = properties.lokiUrl();
+        return url == null || url.isBlank() ? null : new LokiLogStore(http, url);
     }
 
     public TriageReport triage(List<Alert> alerts) {
         if (model == null) {
             return fallback(alerts, 0, "No model is configured, so this report comes from the runbook only.");
         }
-        String lokiUrl = properties.lokiUrl();
         OpsTools tools = new OpsTools(
                 http,
                 runbooks,
                 properties.prometheusUrl(),
                 properties.coreUrl(),
                 properties.edgeManagementUrl(),
-                lokiUrl == null || lokiUrl.isBlank() ? null : new LogSearch(http, lokiUrl),
+                logs == null ? null : new LogSearch(logs),
                 properties.maxToolCalls());
         try {
             TriageAgent agent = AiServices.builder(TriageAgent.class)

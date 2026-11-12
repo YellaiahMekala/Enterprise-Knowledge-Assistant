@@ -45,7 +45,7 @@ class TriageServiceTest {
         server.start();
         String base = "http://127.0.0.1:" + server.getAddress().getPort();
         properties = new OpsProperties(
-                "token", base, base, base, null, Path.of("../docs/runbooks.md"), 3, Duration.ofSeconds(2), null, null);
+                "token", base, base, base, null, null, Path.of("../docs/runbooks.md"), 3, Duration.ofSeconds(2), null, null);
     }
 
     @AfterEach
@@ -144,7 +144,7 @@ class TriageServiceTest {
     void theAgentCanSearchLogsWhenALogStoreIsConfigured() {
         String base = properties.prometheusUrl();
         properties = new OpsProperties(
-                "token", base, base, base, base, Path.of("../docs/runbooks.md"), 3, Duration.ofSeconds(2), null, null);
+                "token", base, base, base, base, null, Path.of("../docs/runbooks.md"), 3, Duration.ofSeconds(2), null, null);
         ScriptedModel model = new ScriptedModel()
                 .then(ScriptedModel.callTool(
                         "1", "searchLogs", "{\"service\":\"core-behind-edge\",\"text\":\"ERROR\",\"minutes\":15}"))

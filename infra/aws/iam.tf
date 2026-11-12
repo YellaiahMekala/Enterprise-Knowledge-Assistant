@@ -45,6 +45,12 @@ data "aws_iam_policy_document" "task" {
     resources = ["${aws_s3_bucket.files.arn}/*"]
   }
 
+  # The triage agent's searchLogs tool reads this deployment's log group (ADR-035).
+  statement {
+    actions   = ["logs:FilterLogEvents", "logs:DescribeLogStreams"]
+    resources = ["${aws_cloudwatch_log_group.app.arn}:*"]
+  }
+
   statement {
     actions = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
     resources = [

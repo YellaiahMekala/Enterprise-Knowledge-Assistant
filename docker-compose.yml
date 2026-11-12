@@ -202,6 +202,8 @@ services:
       OPS_AGENT_CORE_URL: http://core-behind-edge:8000
       OPS_AGENT_EDGE_MANAGEMENT_URL: http://edge:8081
       OPS_AGENT_LOKI_URL: http://loki:3100
+      # A log group switches the searchLogs tool from Loki to CloudWatch Logs (needs AWS credentials).
+      OPS_AGENT_CLOUDWATCH_LOG_GROUP: ${OPS_AGENT_CLOUDWATCH_LOG_GROUP:-}
       OPS_AGENT_RUNBOOK_FILE: /app/runbooks.md
       EKA_ALERT_EMAIL_TO: ${EKA_ALERT_EMAIL_TO:-}
       EKA_ALERT_EMAIL_FROM: ${EKA_ALERT_EMAIL_FROM:-}

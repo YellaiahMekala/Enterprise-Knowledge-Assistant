@@ -27,6 +27,9 @@ Deploy, record the evidence (screenshots, a request log), then `terraform destro
 ## Cost
 A rough estimate, not a quote: Fargate for 2 vCPU and 4 GB in total, a `db.t4g.micro` RDS instance, an application load balancer and logs come to somewhere around 80 to 120 US dollars a month if left running, and about 3 to 4 dollars a day. Bedrock calls are extra and depend on the model. Check the AWS pricing calculator for your region before applying.
 
+## Logs
+Every container writes to the log group `/<name>` (output `log_group`), one stream per container named `eka/<container>/<task id>`. The task role may read that group (`logs:FilterLogEvents`, `logs:DescribeLogStreams`), so the triage agent's CloudWatch adapter works with `OPS_AGENT_CLOUDWATCH_LOG_GROUP=$(terraform output -raw log_group)`. The agent itself is not deployed by this stack; the adapter was tested against LocalStack only.
+
 ## Known gaps
 - The edge generates its signing key at start (`EKA_EDGE_EPHEMERAL_KEY=true`), so a restart changes the key. The core refetches the key set on an unknown key id, but that path was only tested locally.
 - One task and no autoscaling. The rate limiter is in memory, so more than one edge task would multiply the limits.

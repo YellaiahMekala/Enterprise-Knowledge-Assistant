@@ -13,6 +13,7 @@ public record OpsProperties(
         String coreUrl,
         String edgeManagementUrl,
         String lokiUrl,
+        CloudWatch cloudwatch,
         Path runbookFile,
         @DefaultValue("5") int maxToolCalls,
         @DefaultValue("10s") Duration toolTimeout,
@@ -20,6 +21,9 @@ public record OpsProperties(
         Model model) {
 
     public record Mail(String to, String from) {}
+
+    /** CloudWatch Logs instead of Loki: the log group from infra/aws; the endpoint only for a local stand-in. */
+    public record CloudWatch(String logGroup, String endpointUrl) {}
 
     /** Without an api key the agent still sends a report, built from the runbook alone. */
     public record Model(String apiKey, @DefaultValue("gpt-4o-mini") String name, String baseUrl) {}

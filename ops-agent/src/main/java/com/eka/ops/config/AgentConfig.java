@@ -2,6 +2,9 @@ package com.eka.ops.config;
 
 import com.eka.ops.mail.ReportMailer;
 import com.eka.ops.mail.SmtpReportMailer;
+import com.eka.ops.tools.CloudWatchLogStore;
+import com.eka.ops.tools.LogStore;
+import com.eka.ops.tools.LokiLogStore;
 import com.eka.ops.tools.ReadOnlyHttp;
 import com.eka.ops.tools.RunbookReader;
 import com.eka.ops.triage.TriageService;
@@ -37,13 +40,27 @@ public class AgentConfig {
         return builder.build();
     }
 
+    /** CloudWatch Logs when a log group is set, else Loki when a URL is set, else null (no log search). */
     @Bean
-    TriageService triageService(OpsProperties properties, ObjectProvider<ChatModel> model) {
+    LogStore logStore(OpsProperties properties) {
+        OpsProperties.CloudWatch cloudwatch = properties.cloudwatch();
+        if (cloudwatch != null && cloudwatch.logGroup() != null && !cloudwatch.logGroup().isBlank()) {
+            return CloudWatchLogStore.connect(cloudwatch.logGroup(), cloudwatch.endpointUrl(), properties.toolTimeout());
+        }
+        String lokiUrl = properties.lokiUrl();
+        return lokiUrl == null || lokiUrl.isBlank()
+                ? null
+                : new LokiLogStore(new ReadOnlyHttp(properties.toolTimeout()), lokiUrl);
+    }
+
+    @Bean
+    TriageService triageService(OpsProperties properties, ObjectProvider<ChatModel> model, ObjectProvider<LogStore> logs) {
         return new TriageService(
                 properties,
                 model.getIfAvailable(),
                 new ReadOnlyHttp(properties.toolTimeout()),
-                new RunbookReader(properties.runbookFile()));
+                new RunbookReader(properties.runbookFile()),
+                logs.getIfAvailable());
     }
 
     @Bean
