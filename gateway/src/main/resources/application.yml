@@ -63,16 +63,15 @@ management:
   tracing:
     sampling:
       probability: ${EKA_EDGE_TRACE_SAMPLE_RATIO:1.0}
+    export:
+      otlp:
+        # Off unless switched on; an empty endpoint URL would stop the edge from starting.
+        enabled: ${EKA_EDGE_OTEL_ENABLED:false}
   opentelemetry:
     tracing:
       export:
         otlp:
           endpoint: ${EKA_EDGE_OTEL_ENDPOINT:http://localhost:4318/v1/traces}
-  otlp:
-    tracing:
-      export:
-        # Off unless an endpoint is given; an empty URL would stop the edge from starting.
-        enabled: ${EKA_EDGE_OTEL_ENABLED:false}
 
 eka:
   edge:

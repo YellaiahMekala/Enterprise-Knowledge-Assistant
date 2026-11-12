@@ -140,7 +140,7 @@ Equal scores are expected: the stand-in answers with the same offline model. The
 - **Token, cost and time to first token** (ADR-037): real provider token counts, cost from configured per-million prices (empty when none), TTFT, `eka_llm_*` series without user labels, admin usage report and an Admin page in the UI.
 - **Model fallback** (ADR-038): `EKA_CHAT_FALLBACKS` (one fallback), a per-model circuit breaker, failover only before the first text; alert `EkaLlmFailoverBurst`.
 - **Agent delivery tracking**: retries, sent/failed/pending counters, alerts `EkaTriageReportFailed` and `EkaTriageReportStuck`; drilled with a failing mail server.
-- **Readiness** waits for the embedding model; **traces** (NFR-07): set `EKA_OTEL_ENDPOINT` (core) and `EKA_EDGE_OTEL_ENABLED=true` (edge); `docker compose --profile monitoring up -d jaeger`, UI on 16686. Spans never carry text, keys or user ids. A trace continuing a supplied `traceparent` was seen in Jaeger from the core; the full edge-to-database trace is not yet verified.
+- **Readiness** waits for the embedding model; **traces** (NFR-07): set `EKA_OTEL_ENDPOINT` (core) and `EKA_EDGE_OTEL_ENABLED=true` (edge); `docker compose --profile monitoring up -d jaeger`, UI on 16686. Spans never carry text, keys or user ids. Verified end to end on 2026-11-12: one request through the edge showed edge, core and SQL spans in one Jaeger trace (statements parameterised, no token or user name in any attribute). The SQL instrumentation package pins SQLAlchemy below 2.1, so `tracing.py` skips its version check; a test guards that statements still produce spans.
 
 ### Not done
 

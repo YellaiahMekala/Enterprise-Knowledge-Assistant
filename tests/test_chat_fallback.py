@@ -172,7 +172,7 @@ def test_breaker_states_and_a_failed_probe_reopen() -> None:
         breaker.record(False)
     assert breaker.state is State.CLOSED  # under the minimum of 10 calls
     breaker.record(False)
-    assert breaker.state is State.OPEN and not breaker.allow()
+    assert breaker.state is State.OPEN and not breaker.allow()  # type: ignore[comparison-overlap]
     clock.now = 29.9
     assert breaker.state is State.OPEN
     clock.now = 30
@@ -206,7 +206,7 @@ def test_a_mostly_healthy_model_stays_closed() -> None:
 async def test_an_answer_comes_from_the_fallback_and_its_usage_names_it() -> None:
     backup = ScriptedChatModel([GOOD])
     backup.model_name = "backup-model"
-    world = World(chain(Flaky("primary", ModelUnavailable("down")), backup))  # type: ignore[arg-type]
+    world = World(chain(Flaky("primary", ModelUnavailable("down")), backup))
     events = await world.ask()
     assert events[-1].data["refused"] is False
     (_, usage) = world.repo.usage[-1]

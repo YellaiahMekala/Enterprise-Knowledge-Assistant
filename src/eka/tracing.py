@@ -67,7 +67,11 @@ def instrument(app: FastAPI, provider: TracerProvider, engine: AsyncEngine | Non
     HTTPXClientInstrumentor().instrument(tracer_provider=provider)
     BotocoreInstrumentor().instrument(tracer_provider=provider)  # type: ignore[no-untyped-call]
     if engine is not None:
-        SQLAlchemyInstrumentor().instrument(engine=engine.sync_engine, tracer_provider=provider)
+        # The package pins SQLAlchemy below 2.1 and refuses to start on 2.1.x, though the event
+        # hooks it uses are unchanged; test_tracing proves statements still produce spans.
+        SQLAlchemyInstrumentor().instrument(
+            engine=engine.sync_engine, tracer_provider=provider, skip_dep_check=True
+        )
     logger.info("tracing on: spans are exported over OTLP")
 
 

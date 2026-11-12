@@ -94,7 +94,7 @@ Tuning variables: `EKA_EDGE_CB_WINDOW`, `EKA_EDGE_CB_MIN_CALLS`, `EKA_EDGE_CB_OP
 
 ## EkaTriageReportFailed
 
-Also covers **EkaTriageReportStuck**.
+Also see **EkaTriageReportStuck** below.
 
 **Meaning:** the triage agent accepted an alert (it answered Alertmanager with 202) but its report did not go out. `EkaTriageReportFailed`: the email failed 3 times, 5 s and 10 s apart. `EkaTriageReportStuck`: an accepted alert has had no report for 15 minutes, so the investigation is hanging. Alertmanager sends these two alerts by email itself, not through the agent. The original alert is still active in Alertmanager.
 
@@ -102,6 +102,15 @@ Also covers **EkaTriageReportStuck**.
 2. Mail problem: `docker compose logs --since 30m ops-agent | grep "sending the report failed"` shows the exception class. Check `EKA_ALERT_SMTP_HOST`, `EKA_ALERT_SMTP_PORT` and the credentials; a `MailAuthenticationException` means a wrong or revoked password.
 3. Stuck: `docker compose logs --since 30m ops-agent` for a model call that never returned. Restart the agent (`docker compose --profile agent restart ops-agent`); pending work is lost, which is why the original alert stays in Alertmanager.
 4. Counts: `eka_ops_alerts_accepted_total`, `eka_ops_reports_sent_total`, `eka_ops_reports_failed_total` and `eka_ops_reports_pending` (Prometheus, job `ops-agent`).
+
+## EkaTriageReportStuck
+
+The triage agent accepted an alert (202) and has been working on it longer than the stuck threshold, so no report or notice has gone out. Same family as `EkaTriageReportFailed`; the report is late, not known to have failed.
+
+1. Work the original alert from this runbook directly; do not wait for the agent.
+2. `docker compose logs --since 30m ops-agent` for a model call that never returned or a slow Prometheus or log query.
+3. Restart the agent (`docker compose --profile agent restart ops-agent`); pending work is lost, which is why step 1 comes first.
+4. Check `eka_ops_reports_pending` (Prometheus, job `ops-agent`); it should fall back to 0.
 
 ## Backup and restore
 

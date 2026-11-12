@@ -101,7 +101,7 @@ def _app_with(provider_outcome: str) -> TestClient:
 def test_ready_waits_for_the_embedding_model_to_load() -> None:
     with _app_with("slow") as client:
         assert client.get("/health/ready").status_code == 503
-        client.portal.call(client.gate.set)  # type: ignore[attr-defined]
+        client.portal.call(client.gate.set)  # type: ignore[union-attr, call-arg, attr-defined]
         for _ in range(50):
             if client.get("/health/ready").status_code == 200:
                 break

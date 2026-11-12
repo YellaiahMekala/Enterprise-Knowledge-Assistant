@@ -151,8 +151,8 @@ async def test_an_answer_records_tokens_cost_and_both_first_token_times() -> Non
             min_cosine=0.1, price_input_per_1m=1.0, price_output_per_1m=2.0, default_mode="fast"
         ),
     )
-    rig.service._clock = Clock()  # type: ignore[attr-defined]
-    rig.service._on_usage = seen.append  # type: ignore[attr-defined]
+    rig.service._clock = Clock()
+    rig.service._on_usage = seen.append
     await rig.ask()
 
     (_, event) = rig.repo.usage[-1]
@@ -167,7 +167,7 @@ async def test_an_answer_records_tokens_cost_and_both_first_token_times() -> Non
 @pytest.mark.anyio
 async def test_verified_mode_releases_text_later_than_the_first_fragment() -> None:
     rig = World(ScriptedChatModel([GOOD]))
-    rig.service._clock = Clock()  # type: ignore[attr-defined]
+    rig.service._clock = Clock()
     await rig.ask(mode="verified")
     (_, event) = rig.repo.usage[-1]
     assert event.ttft_ms is not None and event.answer_ttfb_ms is not None
@@ -191,7 +191,7 @@ async def test_a_failing_observer_does_not_break_the_answer() -> None:
     def broken(_: UsageEvent) -> None:
         raise RuntimeError("metrics down")
 
-    rig.service._on_usage = broken  # type: ignore[attr-defined]
+    rig.service._on_usage = broken
     events = await rig.ask()
     assert events[-1].type == "done"
 
