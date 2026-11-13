@@ -70,7 +70,8 @@ public class OpsTools {
 
     @Tool("Searches the newest container log lines in Loki (at most 20, credentials masked). "
             + "Services: api, worker, core-behind-edge, edge, db, ops-agent, prometheus, alertmanager. "
-            + "Use it to find errors or tracebacks behind an alert, for example text ERROR in core-behind-edge.")
+            + "Use it to find errors behind an alert. Text ERROR (or WARN, WARNING) returns warnings and "
+            + "errors at any level name; other text is matched literally, for example Traceback or database.")
     public String searchLogs(
             @P("compose service name, for example core-behind-edge") String service,
             @P("plain text the line must contain (case-sensitive), may be empty; at most 100 characters") String text,

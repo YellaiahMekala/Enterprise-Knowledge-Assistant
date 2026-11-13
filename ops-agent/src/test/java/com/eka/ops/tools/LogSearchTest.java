@@ -56,14 +56,26 @@ class LogSearchTest {
 
     @Test
     void theQueryIsBuiltHereFromTheServiceAndTheText() {
-        search().search("api", "ERROR", 15);
+        search().search("api", "db timeout", 15);
 
         assertThat(requests).hasSize(1);
         assertThat(requests.get(0))
-                .startsWith("query={service=\"api\"} |= \"ERROR\"")
+                .startsWith("query={service=\"api\"} |= \"db timeout\"")
                 .contains("&since=15m")
                 .contains("&limit=20")
                 .contains("&direction=backward");
+    }
+
+    @Test
+    void aLevelWordSearchesForWarningsAndErrorsAtAnyLevelName() {
+        // Live run 2026-11-13: the core logs a database outage at WARNING, so a literal ERROR found nothing.
+        for (String word : List.of("ERROR", "error", "WARN", "WARNING", " Errors ")) {
+            requests.clear();
+            search().search("api", word, 15);
+            assertThat(requests.get(0))
+                    .as(word)
+                    .startsWith("query={service=\"api\"} |~ \"ERROR|WARN|CRITICAL|FATAL\"");
+        }
     }
 
     @Test

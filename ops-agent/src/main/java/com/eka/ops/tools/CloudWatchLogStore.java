@@ -63,7 +63,14 @@ public class CloudWatchLogStore implements LogStore {
 
     /** The checked text goes into a CloudWatch filter pattern as one quoted term; it has no quotes. */
     static String filterPattern(String text) {
-        return text == null || text.isBlank() ? null : "\"" + text.strip() + "\"";
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        if (LogLevels.isLevelSearch(text)) {
+            // "?" terms are ORed in a CloudWatch filter pattern.
+            return String.join(" ", LogLevels.PROBLEM_TERMS.stream().map(t -> "?\"" + t + "\"").toList());
+        }
+        return "\"" + text.strip() + "\"";
     }
 
     @Override
@@ -98,7 +105,7 @@ public class CloudWatchLogStore implements LogStore {
                 FilterLogEventsResponse response = client.filterLogEvents(request.build());
                 for (FilteredLogEvent event : response.events()) {
                     // The server filters too; checking here keeps stand-ins that ignore patterns honest.
-                    if (needle != null && !event.message().contains(needle)) {
+                    if (needle != null && !LogLevels.matches(event.message(), needle)) {
                         continue;
                     }
                     newest.addLast(event); // oldest first; keep only the tail

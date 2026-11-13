@@ -127,7 +127,7 @@ I read the 8 string-match misses, the refusal and the wrong citation. I did not 
 - Two reports were emailed, 0 failed (agent counters: 2 accepted, 2 sent, 0 failed, 0 pending).
 - `EkaTargetDown` went the whole real path, Prometheus to Alertmanager to agent to email (the edge was not running). Tool calls: runbook, serviceHealth, `searchLogs` for core and for edge.
 - `EkaHighErrorRate` was posted by hand. Tool calls: runbook, serviceHealth, PromQL, `searchLogs`. The report named the database as the likely cause from the real `/health/ready` 503.
-- **Gap found.** Every `searchLogs` call asked for `ERROR` and got no lines, because the core logs database failures at WARNING level; Loki held 22 matching warning lines. The report was right from health and metrics, not from logs. Not tuned after the fact; listed under "Not done".
+- **Gap found.** Every `searchLogs` call asked for `ERROR` and got no lines, because the core logs database failures at WARNING level; Loki held 22 matching warning lines. The report was right from health and metrics, not from logs. **Fixed the same day:** a level word (`ERROR`, `WARN`, `WARNING`) now searches for warnings and worse at any level name (Loki `|~ "ERROR|WARN|CRITICAL|FATAL"`, CloudWatch `?"ERROR" ?"WARN" ...`); other text still matches literally. The tool description had itself suggested `ERROR`. Rerun of the same outage: the same `api | ERROR` call returned the failure lines, and the report quoted `WARNING: readiness check failed: TimeoutError` as evidence.
 - An earlier attempt with the agent pointed at the edge-profile core name reported the core "unreachable", a wrong diagnosis caused by the test setup, not the code.
 
 Triage agent with `gpt-4o-mini`, one synthetic `EkaHighErrorRate` alert, mail to the local catcher: the agent made 3 read-only calls (runbook, service health, one PromQL query) and sent a report in about 11 s. The core and edge were not running in that test, so the tools correctly reported them unreachable; the report's guess of "database issues" was the model's own and wrong (the database was up), which is why the report says to check the evidence before acting. One run; real email delivery was not tested.
@@ -171,7 +171,6 @@ Equal scores are expected: the stand-in answers with the same offline model. The
 | Item | Note |
 |---|---|
 | Reranking on by default | Needs a larger evaluation set than 13 chunks (see ADR-032) |
-| Triage log search misses WARNING lines | The model filters `searchLogs` on `ERROR`; database failures log at WARNING, so the live run found no log lines. Options: log dependency failures at ERROR, or let the tool match WARNING too |
 | Full hand scoring of live answers | Only the misses were read (see above) |
 | Other models and the real cross-provider table | Only `gpt-4o-mini` was run live; the comparison pipeline is ready and needs Bedrock access (an AWS account and approval of the spend) |
 | Entra ID or other hosted identity provider | Tested against Keycloak only |

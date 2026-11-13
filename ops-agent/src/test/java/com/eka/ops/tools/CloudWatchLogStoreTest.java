@@ -74,6 +74,24 @@ class CloudWatchLogStoreTest {
     }
 
     @Test
+    void aLevelWordBecomesAnOrPatternAndKeepsWarningLines() {
+        CloudWatchLogStore store = new CloudWatchLogStore(
+                client(r -> page(null,
+                        event(1, "INFO GET /health/ready 200"),
+                        event(2, "WARNING readiness check failed: OperationalError"),
+                        event(3, "WARN reset by peer"),
+                        event(4, "ERROR Unhandled exception"))),
+                "/eka");
+
+        List<LogStore.Line> lines = store.newest("api", "ERROR", 10, 20);
+
+        assertThat(requests.get(0).filterPattern()).isEqualTo("?\"ERROR\" ?\"WARN\" ?\"CRITICAL\" ?\"FATAL\"");
+        // The stub ignores the pattern, so this also checks the local filter: the INFO line is dropped.
+        assertThat(lines).extracting(LogStore.Line::text).containsExactly(
+                "ERROR Unhandled exception", "WARN reset by peer", "WARNING readiness check failed: OperationalError");
+    }
+
+    @Test
     void theNewestLinesAreKeptAcrossPagesAndReturnedNewestFirst() {
         CloudWatchLogStore store = new CloudWatchLogStore(
                 client(r -> r.nextToken() == null
@@ -129,7 +147,7 @@ class CloudWatchLogStoreTest {
         String result = new LogSearch(store).search("api", "ERROR", 5);
 
         assertThat(result)
-                .startsWith("1 newest line(s) for /eka eka/core/* pattern \"ERROR\":\n")
+                .startsWith("1 newest line(s) for /eka eka/core/* pattern ?\"ERROR\" ?\"WARN\" ?\"CRITICAL\" ?\"FATAL\":\n")
                 .contains("2026-11-11T10:00:01Z ERROR db timeout password=***")
                 .doesNotContain("hunter2");
     }

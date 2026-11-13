@@ -24,7 +24,13 @@ public class LokiLogStore implements LogStore {
     @Override
     public String describe(String service, String text) {
         String selector = "{service=\"" + service + "\"}";
-        return text == null || text.isBlank() ? selector : selector + " |= \"" + text.strip() + "\"";
+        if (text == null || text.isBlank()) {
+            return selector;
+        }
+        if (LogLevels.isLevelSearch(text)) {
+            return selector + " |~ \"" + String.join("|", LogLevels.PROBLEM_TERMS) + "\"";
+        }
+        return selector + " |= \"" + text.strip() + "\"";
     }
 
     @Override
