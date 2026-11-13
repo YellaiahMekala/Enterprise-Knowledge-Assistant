@@ -63,16 +63,19 @@ export class Login {
   protected submit(): void {
     this.busy.set(true);
     this.error.set('');
-    this.session.signIn(this.key().trim());
-    this.api.me().subscribe({
-      next: () => this.router.navigate(['/chat']),
+    // The key is checked before it is stored: storing it first signed the app in, and the
+    // shell's admin check then sent the rejected key a second time (found by the P16 browser test).
+    const key = this.key().trim();
+    this.api.me(key).subscribe({
+      next: () => {
+        this.session.signIn(key);
+        this.router.navigate(['/chat']);
+      },
       error: (e) => {
         this.busy.set(false);
-        // The interceptor already cleared the key on a 401.
         this.error.set(
           e.status === 401 ? 'That key was not accepted.' : 'Could not reach the service.',
         );
-        if (e.status !== 401) this.session.signOut();
       },
     });
   }

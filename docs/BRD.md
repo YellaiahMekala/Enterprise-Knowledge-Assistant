@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| Version | 0.3 (draft for approval) |
-| Date | 2026-10-31 |
+| Version | 0.7 (draft for approval) |
+| Date | 2026-11-13 |
 | Status of the product | Core, edge, UI, evaluation and operations basics built (phases P0 to P7, 2026-11-07); CI runs on GitHub Actions. Everything marked Planned below is design, not code. |
 | Related documents | Architecture · Technical Design (TDD) · Implementation Plan · Test Strategy · Threat Model · Operational Readiness · Release Evidence · [Decision records](adr/README.md) |
 
@@ -13,6 +13,7 @@
 |---|---|---|
 | 0.1 | 2026-10-31 | First draft: RAG core, Angular UI, Java gateway as design only |
 | 0.2 | 2026-10-31 | After external assessment: Java edge service becomes a delivered slice (FR-60 to FR-67); business outcomes, stakeholders and data classification added; operability, threat model, resilience and release-evidence requirements added (NFR-14 to NFR-18); phases renumbered (edge is P5); decisions moved to `adr/` |
+| 0.7 | 2026-11-13 | P16: FR-37 adds bounded link following (one level, same directory, robots.txt, capped, off by default; ADR-039); NFR-07 adds a local log shipper to CloudWatch Logs (Vector, ADR-040); FR-40 and NFR-08 add a browser test in CI (Playwright, ADR-041); AC-29 to AC-31; NFR-08 test counts refreshed |
 | 0.6 | 2026-11-12 | NFR-07 adds CloudWatch Logs as a second log store for the triage agent (ADR-035), tested against a local CloudWatch stand-in; FR-40 tokens are now renewed before they expire, not only after; NFR-08 test counts refreshed |
 | 0.5 | 2026-11-11 | FR-37 Done (web fallback, ADR-030) with AC-23 met and R15 mitigated; FR-40 tokens now refreshed |
 | 0.4 | 2026-11-11 | Status updates: FR-40 Done (single sign-on in the UI through Keycloak and the edge); NFR-07 adds a log store (Loki); NFR-08 test counts refreshed |
@@ -197,7 +198,7 @@ FR-52 status: both endpoints exist and are tested; readiness currently checks no
 | ID | Requirement | Pri | Status | Phase |
 |---|---|---|---|---|
 | FR-36 | Ingest code and text files (`.java`, `.md`, `.txt`, `.xml`, `.sql` and similar allow-listed extensions): UTF-8 only, size-capped, binary rejected; chunk preferring class and method boundaries; locator is file plus line range | S | Done | P2 |
-| FR-37 | Optional web fallback: when the user's documents give weak evidence, fetch from an owner-configured allowlist of official HTTPS sites only (SSRF-safe, size and time capped, redirects re-checked), treat the page as untrusted, store it as a document with source URL and fetch date, and cite it as a web source distinct from document citations | C | Done, off by default (2026-11-11): owner-configured entry URLs only, no search engine or crawling; run live against docs.python.org with the fake model | P4b |
+| FR-37 | Optional web fallback: when the user's documents give weak evidence, fetch from an owner-configured allowlist of official HTTPS sites only (SSRF-safe, size and time capped, redirects re-checked), treat the page as untrusted, store it as a document with source URL and fetch date, and cite it as a web source distinct from document citations | C | Done, off by default (2026-11-11): owner-configured entry URLs, plus (2026-11-13, ADR-039, off by default) up to `EKA_WEB_MAX_LINKED_PAGES` pages linked from each entry page: one level only, same directory, robots.txt respected, same fetch guard. No search engine or crawling. Run live against docs.python.org with the fake model; a linked page was cited end to end through the API | P4b |
 | FR-38 | Two answer-streaming modes: **verified** (default) releases text only after citations validate; **fast** (optional) streams immediately, marks text provisional, and the final event confirms or replaces it | M | Done | P4 |
 
 ## 7. Non-functional requirements
@@ -212,8 +213,8 @@ All numeric targets are **targets, not measurements**. They are verified in P6, 
 | NFR-04 | Ingestion | A 100-page text PDF reaches `ready` in ≤ 2 minutes on 2 vCPU | Planned (target) |
 | NFR-05 | Cost | Bounded prompt: top-k, context-token and output-token caps; per-question token accounting; per-user limits at the edge; embeddings at zero marginal cost | Partial: top-k, context and output caps, per-question usage events and per-user rate limits built; token accounting and cost are FR-53 (Planned, P10) |
 | NFR-06 | Reliability | Timeouts and bounded retries with backoff on provider calls; interrupted ingestion resumes after restart; failures return typed errors, never partial fabricated answers | Partial: provider timeouts and bounded retries; the worker reclaims stale jobs after a crash; edge timeouts and circuit breaker. Fault injection beyond the edge Planned |
-| NFR-07 | Observability | JSON logs with request and trace ids; Prometheus metrics from edge and core; distributed traces (OpenTelemetry, Jaeger in the monitoring profile; core and edge built, P12); usage events | Partial: JSON logs with request id, Prometheus metrics from edge and core, Grafana dashboard, usage events, container logs in Loki (collected by Alloy, searchable in Grafana and by the triage agent); the triage agent also reads CloudWatch Logs on AWS through the same fixed-service, plain-text, bounded-window search (log group from the Terraform output, read-only IAM, tested against LocalStack; not run on real AWS); distributed traces Planned |
-| NFR-08 | Testability | Offline test suites for both services; one real-database integration layer; evaluation set in CI; contract tests across the edge-core boundary | Done: core 554 tests (integration on a real PostgreSQL), edge 43, triage agent 66, UI 39, evaluation gate and API-contract run in CI |
+| NFR-07 | Observability | JSON logs with request and trace ids; Prometheus metrics from edge and core; distributed traces (OpenTelemetry, Jaeger in the monitoring profile; core and edge built, P12); usage events | Partial: JSON logs with request id, Prometheus metrics from edge and core, Grafana dashboard, usage events, container logs in Loki (collected by Alloy, searchable in Grafana and by the triage agent); the triage agent also reads CloudWatch Logs on AWS through the same fixed-service, plain-text, bounded-window search (log group from the Terraform output, read-only IAM, tested against LocalStack; not run on real AWS); locally a `cloudwatch` compose profile ships the containers' logs to CloudWatch Logs with the AWS stream names (Vector, ADR-040; tested against LocalStack 4.9 and searched by the agent); distributed traces Planned |
+| NFR-08 | Testability | Offline test suites for both services; one real-database integration layer; evaluation set in CI; contract tests across the edge-core boundary | Done: core 680 tests (integration on a real PostgreSQL), edge 47, triage agent 80, UI 39 unit tests plus a Playwright browser test against a real core (ADR-041), evaluation gate and API-contract run in CI |
 | NFR-09 | Portability | LLM, embedder, reranker and file storage sit behind interfaces so providers are replaceable by configuration | Done: chat model, embedder, reranker and file storage sit behind interfaces; each has at least two adapters or a fake |
 | NFR-10 | Maintainability | Ruff and mypy strict clean; line coverage gate ≥ 85% in CI; Java build with architecture tests | Done: ruff and strict mypy clean; the 85% coverage gate passes in CI; edge architecture tests |
 | NFR-11 | Delivery | Non-root multi-stage images for core, edge and UI; one-command local stack; CI on every push | Partial: non-root multi-stage core and edge images, one-command Compose stack, CI on every push; UI image Planned |
@@ -258,6 +259,9 @@ All numeric targets are **targets, not measurements**. They are verified in P6, 
 | AC-26 | FR-54, NFR-19 | With a primary model that always fails before text, the answer is returned by the fallback and the usage event names the fallback model; once the breaker is open the primary is not called | Done |
 | AC-27 | FR-54 | A failure after the first text fragment ends in the existing error event and is not retried on another model; a cancelled stream closes the provider stream of the model that was active | Done |
 | AC-28 | FR-54, NFR-17 | If every configured model fails or is open the client gets the same 502 or 504 problem document as without a fallback; the `EkaLlmFailoverBurst` alert rule passes `promtool test rules` | Done |
+| AC-29 | FR-37 | Met (2026-11-13: 8 unit tests; live run stored a docs.python.org entry page and 5 linked pages; a question was answered citing a linked page). With link following on, only links under the entry page's directory on the same host are fetched, at most the configured number per entry page, never past one level, and none that the host's robots.txt disallows for `eka-web-fallback`; an unreadable robots.txt means no links are followed. |
+| AC-30 | NFR-07 | Met (2026-11-13, LocalStack only). With the `cloudwatch` profile on, core log lines appear in the log group under `eka/core/<id>` and the triage agent's CloudWatch search finds them, with and without an `ERROR` filter. |
+| AC-31 | FR-40, NFR-08 | Met locally (2026-11-13, 6 passes in a row; first GitHub Actions run pending). In CI a browser signs in with an API key, uploads a file, waits for `ready`, gets an answer with a citation to that file, sees a refusal for an off-topic question and signs out, with no unexpected console error. |
 
 ## 9. Risks
 
@@ -277,7 +281,7 @@ All numeric targets are **targets, not measurements**. They are verified in P6, 
 | R12 | Fail-closed auditing makes sensitive actions unavailable when the audit store is down | Medium | Medium | Deliberate trade-off (ADR-024); store health alert; non-sensitive traffic unaffected |
 | R13 | Restricted-class data uploaded by mistake and sent to a hosted provider | Medium | High | Procedural control only in v1 (4.3); upload acknowledgement; local-model adapter Planned |
 | R14 | Spring Boot 3.5.x line is at or past the end of public releases (last release on Maven Central dated 2026-06-25), so the edge uses 4.1.x | Medium | Medium | Decided (D-1): Spring Boot 4.1.x with Spring Cloud 2025.1.x, confirmed by a dependency spike in P3b (ADR-021) |
-| R15 | The web fallback opens a new attack surface (SSRF, prompt injection from fetched pages, allowlist bypass through redirects) | Medium | High | Built, off by default; allowlist-only, address checks after DNS resolution, connection pinned to the checked address, redirect re-checks, size and time caps, content treated as untrusted ([ADR-030](adr/ADR-030-allowlisted-web-fallback.md), Threat Model) |
+| R15 | The web fallback opens a new attack surface (SSRF, prompt injection from fetched pages, allowlist bypass through redirects) | Medium | High | Built, off by default; allowlist-only, address checks after DNS resolution, connection pinned to the checked address, redirect re-checks, size and time caps, content treated as untrusted ([ADR-030](adr/ADR-030-allowlisted-web-fallback.md), Threat Model). Link following (ADR-039) stays on the allowlist, one level and the entry page's directory, capped at 20 per entry page, and honours robots.txt |
 | R16 | The owner's private learning material (possibly copyrighted) is committed or published by mistake | Low | High | Corpus lives in a git-ignored `data/` folder; secret and file-list review before every commit; public demos use a synthetic or openly licensed corpus |
 
 ## 10. Dependencies

@@ -39,8 +39,10 @@ export class ApiService {
   private readonly session = inject(SessionService);
   private readonly oidc = inject(OidcClient);
 
-  me() {
-    return this.http.get<{ user_id: string; role: string }>('/api/v1/me');
+  /** With ``apiKey``, checks that key before it is stored (sign-in); otherwise uses the session. */
+  me(apiKey?: string) {
+    const headers: Record<string, string> = apiKey ? { 'X-API-Key': apiKey } : {};
+    return this.http.get<{ user_id: string; role: string }>('/api/v1/me', { headers });
   }
 
   /** Admin only (403 otherwise): usage by user or by UTC day over the last `days` days. */

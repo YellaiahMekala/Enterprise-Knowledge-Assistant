@@ -135,6 +135,7 @@ def _web_fallback(settings: Settings, database: Database | None) -> WebFallback 
             refresh_hours=settings.web_refresh_hours,
             wait_seconds=settings.web_ingest_wait_seconds,
             max_text_bytes=settings.max_text_file_kb * 1024,
+            max_linked_pages=settings.web_max_linked_pages,
         ),
     )
 

@@ -1,0 +1,44 @@
+# Ships this compose project's container logs to CloudWatch Logs with the stream names the AWS
+# stack uses (eka/<container>/<container id>), so the triage agent's CloudWatch search
+# (OPS_AGENT_CLOUDWATCH_LOG_GROUP) can be tried on local traffic. Alloy keeps shipping to Loki;
+# it has no CloudWatch Logs writer, which is why this is a second collector (ADR-040).
+#
+# Start: docker compose --profile cloudwatch up -d log-shipper (and localstack for a stand-in).
+
+sources:
+  containers:
+    type: docker_logs
+    include_labels:
+      - "com.docker.compose.project=${COMPOSE_PROJECT}"
+    # Its own output would otherwise be shipped and read back.
+    exclude_containers:
+      - "${COMPOSE_PROJECT}-log-shipper"
+      - "${COMPOSE_PROJECT}-localstack"
+
+transforms:
+  named:
+    type: remap
+    inputs: [containers]
+    # Empty lines are dropped: the CloudWatch sink stops on a zero-length message.
+    drop_on_abort: true
+    source: |
+      if strlen(strip_whitespace(string(.message) ?? "")) == 0 { abort }
+      service = string(.label."com.docker.compose.service") ?? "unknown"
+      # Compose service name to the ECS container name in infra/aws/ecs.tf.
+      .container = if service == "api" || service == "core-behind-edge" { "core" } else { service }
+      .container_id = slice!(string!(.container_id), 0, 12)
+
+sinks:
+  cloudwatch:
+    type: aws_cloudwatch_logs
+    inputs: [named]
+    region: "${AWS_REGION}"
+    endpoint: "${CLOUDWATCH_ENDPOINT_URL:-}"
+    group_name: "${CLOUDWATCH_LOG_GROUP}"
+    stream_name: "eka/{{ container }}/{{ container_id }}"
+    create_missing_group: true
+    create_missing_stream: true
+    encoding:
+      codec: text
+    batch:
+      timeout_secs: 2

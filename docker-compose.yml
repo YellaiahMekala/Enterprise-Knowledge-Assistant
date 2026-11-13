@@ -51,6 +51,8 @@ services:
       EKA_WEB_FALLBACK_ENABLED: ${EKA_WEB_FALLBACK_ENABLED:-false}
       EKA_WEB_ALLOWED_HOSTS: ${EKA_WEB_ALLOWED_HOSTS:-[]}
       EKA_WEB_ENTRY_URLS: ${EKA_WEB_ENTRY_URLS:-[]}
+      # Pages linked from each entry page to fetch too, same directory, robots.txt respected.
+      EKA_WEB_MAX_LINKED_PAGES: ${EKA_WEB_MAX_LINKED_PAGES:-0}
     volumes:
       - eka-files:/data/files
 
@@ -203,6 +205,37 @@ services:
     volumes:
       - ./monitoring/alloy.alloy:/etc/alloy/config.alloy:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  # CloudWatch profile (ADR-040): ships the containers' logs to CloudWatch Logs with the AWS stream
+  # names, for trying the agent's CloudWatch search locally. Against LocalStack by default:
+  #   docker compose --profile cloudwatch up -d localstack log-shipper
+  # Real AWS: set CLOUDWATCH_ENDPOINT_URL empty and real AWS_* credentials (costs money; ask first).
+  log-shipper:
+    mem_limit: 128m
+    profiles: [cloudwatch]
+    image: timberio/vector:0.51.1-alpine
+    restart: unless-stopped
+    command: ["--config", "/etc/vector/vector.yaml"]
+    environment:
+      COMPOSE_PROJECT: ${COMPOSE_PROJECT_NAME:-enterprise-knowledge-assistant}
+      CLOUDWATCH_LOG_GROUP: ${CLOUDWATCH_LOG_GROUP:-/eka-local}
+      CLOUDWATCH_ENDPOINT_URL: ${CLOUDWATCH_ENDPOINT_URL:-http://localstack:4566}
+      AWS_REGION: ${AWS_REGION:-eu-west-1}
+      AWS_ACCESS_KEY_ID: ${CLOUDWATCH_ACCESS_KEY_ID:-test}
+      AWS_SECRET_ACCESS_KEY: ${CLOUDWATCH_SECRET_ACCESS_KEY:-test}
+    volumes:
+      - ./monitoring/vector-cloudwatch.yaml:/etc/vector/vector.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  # A local AWS stand-in (CloudWatch Logs, SQS, SNS) for the profile above; no account needed.
+  localstack:
+    mem_limit: 1g
+    profiles: [cloudwatch]
+    image: localstack/localstack:4.9
+    environment:
+      SERVICES: logs,sqs,sns
+    ports:
+      - "127.0.0.1:4566:4566"
 
   # Agent profile: `docker compose --profile monitoring --profile agent up -d`.
   # Receives Alertmanager webhooks, investigates with read-only tools, emails a report.

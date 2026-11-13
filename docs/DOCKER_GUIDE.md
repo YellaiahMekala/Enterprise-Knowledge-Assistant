@@ -21,6 +21,8 @@ Run every command from the `enterprise-knowledge-assistant/` folder in Git Bash.
 | `quay.io/keycloak/keycloak:26.3` | `keycloak` | `idp` | Pull |
 | `enterprise-knowledge-assistant-ops-agent` | `ops-agent` | `agent` | Build (`ops-agent/Dockerfile`) |
 | `axllent/mailpit:v1.27` | `mailpit` | `agent` | Pull |
+| `timberio/vector:0.51.1-alpine` | `log-shipper` | `cloudwatch` | Pull |
+| `localstack/localstack:4.9` | `localstack` | `cloudwatch` | Pull |
 
 Base images used by the builds (pulled automatically during `build`):
 `python:3.12-slim`, `maven:3.9-eclipse-temurin-21`, `eclipse-temurin:21-jre`.
@@ -78,6 +80,10 @@ docker compose --profile edge --profile idp up -d --build
 
 # Triage agent and the local mail catcher (needs the monitoring profile)
 docker compose --profile monitoring --profile agent up -d --build
+
+# Container logs to CloudWatch Logs (ADR-040), against LocalStack on :4566 by default.
+# Search them with the agent: OPS_AGENT_CLOUDWATCH_LOG_GROUP=/eka-local
+docker compose --profile cloudwatch up -d localstack log-shipper
 
 # Everything
 docker compose --profile edge --profile idp --profile monitoring --profile agent up -d --build

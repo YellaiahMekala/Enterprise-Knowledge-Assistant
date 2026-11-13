@@ -152,6 +152,8 @@ class Settings(BaseSettings):
     web_fetch_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
     web_max_page_kb: int = Field(default=2048, ge=16, le=10_240)
     web_ingest_wait_seconds: float = Field(default=30.0, gt=0, le=120)
+    # Pages linked from each entry page to fetch too (ADR-039); 0 = entry pages only.
+    web_max_linked_pages: int = Field(default=0, ge=0, le=20)
 
     @model_validator(mode="after")
     def _web_fallback_is_fully_configured(self) -> Self:

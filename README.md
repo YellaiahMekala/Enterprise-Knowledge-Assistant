@@ -172,6 +172,12 @@ Equal scores are expected: the stand-in answers with the same offline model. The
 - **AWS hardening (`infra/aws`):** autoscaling of the api service (2 to 4 tasks), ElastiCache with TLS, WAF (managed rules and a per-address rate rule), GitHub OIDC deploy role and a manual deploy workflow, CloudWatch alarms named after the alert rules.
 - **Triage agent on AWS:** its own Fargate service with no inbound port; CloudWatch alarms reach it through SNS and an SQS queue it polls (`OPS_AGENT_ALARM_QUEUE_URL`), parsed into the same alerts Alertmanager sends. Tested with a stand-in SQS client; a test checks every alarm name has a runbook section.
 
+### Added in P16
+
+- **Web fallback follows links** (ADR-039, off unless `EKA_WEB_MAX_LINKED_PAGES` is 1 to 20): when an entry page is fetched, up to that many pages it links to are fetched too. One level only, only under the entry page's directory on the same host, only if the host's robots.txt allows the agent `eka-web-fallback` (unreadable robots.txt: no links), all through the same guarded fetcher. Checked live against docs.python.org: with the tutorial index as the only entry URL, a question about default argument values was answered with a citation to the linked `controlflow.html` (fake chat model).
+- **Local logs to CloudWatch** (ADR-040): `docker compose --profile cloudwatch up -d localstack log-shipper` starts Vector, which ships this project's container logs to CloudWatch Logs with the AWS stream names (`eka/core/<id>`). Alloy has no CloudWatch writer, so Vector runs next to it. Checked against LocalStack: the triage agent's CloudWatch search found the shipped lines (`ShippedLogsLiveTest`). Not tried against real AWS.
+- **Browser test in CI** (ADR-041): a Playwright test signs in, uploads a file, waits for `ready`, checks a cited answer and a refusal, and signs out, against a real core with the fake model (`ui/e2e`, CI job `ui-browser`). It found a login bug: a wrong key was stored before it was checked, which sent it twice. Fixed.
+
 ### Not done
 
 | Item | Note |
@@ -182,10 +188,10 @@ Equal scores are expected: the stand-in answers with the same offline model. The
 | Entra ID or other hosted identity provider | Tested against Keycloak only |
 | Real email delivery | Verified only into a local mail catcher; real SMTP not tried |
 | Agent failing after it accepted an alert | The watchdog covers failed deliveries to the agent, not an agent that accepts the alert and then fails to send its email |
-| Logs on AWS | The Terraform sends container logs to CloudWatch and the triage agent searches them (`OPS_AGENT_CLOUDWATCH_LOG_GROUP`), tested against LocalStack only. The agent's Terraform and the alarm queue are validated, not applied; nothing ran on real AWS. The local Alloy collector does not ship to CloudWatch |
-| Web fallback beyond fixed entry pages | v1 fetches only the configured entry URLs (no search engine, no crawling), and only with the fake model so far. A page that the worker has not indexed within 30 s is used from the next question on |
+| Logs on AWS | The Terraform sends container logs to CloudWatch and the triage agent searches them (`OPS_AGENT_CLOUDWATCH_LOG_GROUP`), tested against LocalStack only. The agent's Terraform and the alarm queue are validated, not applied; nothing ran on real AWS. Locally, logs reach CloudWatch through the Vector shipper (LocalStack only) |
+| Web fallback: search and crawling | Entry URLs plus one level of links in the same directory (ADR-039); no search engine and no deeper crawling. Run only with the fake model so far. A page that the worker has not indexed within 30 s is used from the next question on |
 | Real Bedrock call, real AWS deployment | Needs an AWS account; the adapter has run end to end only against the local stand-in, and the Terraform (including WAF, autoscaling, alarms, the agent service and the deploy workflow) is validated only |
-| Browser script in CI | The UI's browser check runs by hand only |
+| Browser test on GitHub Actions | The `ui-browser` job passed 6 times locally; its first run on GitHub Actions is still to come. The single sign-on build has no browser test |
 
 ## Tech stack
 
@@ -280,7 +286,7 @@ docker compose up --build        # database, migration, API and worker
 curl http://localhost:8000/health/ready
 ```
 
-Compose needs the settings from `.env` (it refuses to start without `EKA_DB_PASSWORD` and `EKA_API_KEYS`). The image runs as a non-root user, writes JSON logs and defaults to `EKA_ENVIRONMENT=prod`, which hides the API docs; Compose sets `local` so `/docs` stays available. A one-shot `migrate` service applies the schema before the API and the worker start. Optional profiles (`edge`, `idp`, `monitoring`, `agent`) are listed in the [Docker guide](docs/DOCKER_GUIDE.md). The database port is published on `127.0.0.1` only, for local use.
+Compose needs the settings from `.env` (it refuses to start without `EKA_DB_PASSWORD` and `EKA_API_KEYS`). The image runs as a non-root user, writes JSON logs and defaults to `EKA_ENVIRONMENT=prod`, which hides the API docs; Compose sets `local` so `/docs` stays available. A one-shot `migrate` service applies the schema before the API and the worker start. Optional profiles (`edge`, `idp`, `monitoring`, `agent`, `cloudwatch`) are listed in the [Docker guide](docs/DOCKER_GUIDE.md). The database port is published on `127.0.0.1` only, for local use.
 
 ## Configuration
 
@@ -293,7 +299,7 @@ Compose needs the settings from `.env` (it refuses to start without `EKA_DB_PASS
 | `EKA_AUTH_MODE` | none (required) | `api_key` (the core on its own) or `gateway` (behind the edge: only the edge's internal token is accepted; needs `EKA_GATEWAY_JWKS_URL`) |
 | `EKA_API_KEYS` | none (required in `api_key` mode) | JSON object: `{"<user-id>": {"sha256": "<64 hex characters>", "role": "user"}}` with role `user` or `admin` |
 | `EKA_DB_PASSWORD`, `EKA_DB_PORT` | none (required), `5432` | Used by `docker-compose.yml` for the database service |
-| `EKA_WEB_FALLBACK_ENABLED` | `false` | Turns on the web fallback (ADR-030). Then `EKA_WEB_ALLOWED_HOSTS` (JSON list of exact host names) and `EKA_WEB_ENTRY_URLS` (JSON list of 1 to 10 https URLs on those hosts) are required; startup fails otherwise. Pages are refreshed after `EKA_WEB_REFRESH_HOURS` (24) |
+| `EKA_WEB_FALLBACK_ENABLED` | `false` | Turns on the web fallback (ADR-030). Then `EKA_WEB_ALLOWED_HOSTS` (JSON list of exact host names) and `EKA_WEB_ENTRY_URLS` (JSON list of 1 to 10 https URLs on those hosts) are required; startup fails otherwise. Pages are refreshed after `EKA_WEB_REFRESH_HOURS` (24). `EKA_WEB_MAX_LINKED_PAGES` (0 to 20, default 0) also fetches that many pages linked from each entry page, one level deep in the same directory (ADR-039) |
 
 The chat provider (fake, OpenAI-compatible or Bedrock), file storage, reranker and limits are listed with comments in `.env.example`. Settings come from environment variables or a git-ignored `.env` file (copy `.env.example`). Secrets are supplied the same way and never committed.
 
@@ -363,7 +369,15 @@ before 2026-11-11, recreate it once (`docker compose --profile idp up -d --force
 so the realm with the sign-out redirect and refresh token rotation is imported. The test users
 have fixed ids there, so recreating Keycloak does not change which documents they see.
 
-Tests: `npm test` (39). The API key or tokens stay in `sessionStorage` for the tab only. The access
+Tests: `npm test` (39). Browser test (Docker and Chromium; starts its own core in the compose project `eka-e2e`):
+
+```bash
+ui/e2e/stack.sh up
+cd ui && npx playwright install chromium && E2E_API_KEY=$(cat e2e/.stack.key) npx playwright test
+cd .. && ui/e2e/stack.sh down
+```
+
+ The API key or tokens stay in `sessionStorage` for the tab only. The access
 token lives 15 minutes; when it has expired, the app swaps the refresh token for a new pair before
 the next request, and a timer renews it a minute before it expires so an open page never sends an expired one (one renewal shared by the timer and concurrent requests). Keycloak rotates refresh tokens and
 ends the session after 30 idle minutes or 8 hours; then the renewal fails and you sign in again.

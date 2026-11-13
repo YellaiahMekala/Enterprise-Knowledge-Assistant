@@ -44,3 +44,6 @@ Template: Status, Date, Decision owner, Review trigger, Related requirements or 
 | [ADR-036](ADR-036-citation-grounding-and-refusal-gate.md) | Citation grounding check and a refusal gate of 0.50 | Accepted |
 | [ADR-037](ADR-037-token-cost-and-ttft-accounting.md) | Token, cost and time-to-first-token accounting | Accepted |
 | [ADR-038](ADR-038-model-fallback-chain-and-breaker.md) | Model fallback chain with a per-model circuit breaker | Accepted |
+| [ADR-039](ADR-039-web-fallback-link-following.md) | Web fallback follows links one level deep (no crawling) | Accepted |
+| [ADR-040](ADR-040-cloudwatch-log-shipping-vector.md) | Ship local container logs to CloudWatch Logs with Vector | Accepted |
+| [ADR-041](ADR-041-browser-test-in-ci.md) | A Playwright browser test in CI against a real core | Accepted |

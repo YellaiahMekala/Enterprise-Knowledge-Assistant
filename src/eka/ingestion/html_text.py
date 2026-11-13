@@ -1,4 +1,4 @@
-"""Turn a fetched web page into Markdown text for the normal text loader (ADR-030).
+"""Turn a fetched web page into Markdown text, and list its links (ADR-030, ADR-039).
 
 Navigation, scripts, styles and forms are dropped; headings become ``#`` lines so the Markdown
 loader splits the page into sections, list items become ``-`` lines and ``pre`` blocks become
@@ -6,6 +6,7 @@ fenced code. Standard library only: the page is untrusted and nothing in it is e
 """
 
 from html.parser import HTMLParser
+from urllib.parse import urldefrag, urljoin, urlsplit
 
 from eka.domain.models import WebPage
 
@@ -129,3 +130,73 @@ def page_to_markdown(page: WebPage) -> tuple[str, str]:
     while "\n\n\n" in text:
         text = text.replace("\n\n\n", "\n\n")
     return " ".join(extractor.title.split()), text.strip()
+
+
+# Files a documentation link may point at that are not pages to read.
+_NOT_PAGES = (
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".svg",
+    ".ico",
+    ".css",
+    ".js",
+    ".pdf",
+    ".zip",
+    ".gz",
+    ".tar",
+    ".whl",
+    ".exe",
+    ".dmg",
+    ".mp4",
+    ".mp3",
+    ".woff",
+    ".woff2",
+    ".txt",
+)
+
+
+class _LinkCollector(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.hrefs: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "a":
+            href = dict(attrs).get("href")
+            if href:
+                self.hrefs.append(href.strip())
+
+
+def page_links(page: WebPage, scope: str) -> list[str]:
+    """Links on an HTML page to other pages under ``scope`` (an https URL prefix), in page order.
+
+    Fragments are dropped and each address appears once; the page itself, other hosts, other
+    schemes and files that are not pages are left out. The caller still checks every link with
+    the fetcher's allowlist and address rules.
+    """
+    if page.content_type == "text/plain":
+        return []
+    collector = _LinkCollector()
+    collector.feed(page.text)
+    collector.close()
+    own = urldefrag(page.url).url
+    found: list[str] = []
+    for href in collector.hrefs:
+        if href.startswith(("mailto:", "javascript:", "tel:", "data:")):
+            continue
+        url = urldefrag(urljoin(page.url, href)).url
+        if not url.startswith(scope) or url == own or url in found:
+            continue
+        if urlsplit(url).path.lower().endswith(_NOT_PAGES):
+            continue
+        found.append(url)
+    return found
+
+
+def link_scope(entry_url: str) -> str:
+    """The prefix followed links must share: the entry page's host and directory."""
+    parts = urlsplit(entry_url)
+    directory = parts.path.rsplit("/", 1)[0] + "/"
+    return f"https://{parts.netloc}{directory}"
