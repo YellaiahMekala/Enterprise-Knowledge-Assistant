@@ -30,10 +30,23 @@ public record EdgeProperties(
         @DefaultValue("eka-admin") String adminRole,
         @Valid @DefaultValue RateLimit rateLimit) {
 
-    /** Requests a single user may make: a burst, then a steady rate. */
+    /**
+     * Requests a single user may make: a burst, then a steady rate. With a Redis URL
+     * ({@code redis://} or {@code rediss://} for TLS) every edge instance shares the count.
+     */
     public record RateLimit(
             @DefaultValue("20") @Positive int burst,
-            @DefaultValue("5") @Positive double perSecond) {}
+            @DefaultValue("5") @Positive double perSecond,
+            String redisUrl,
+            @DefaultValue("200ms") Duration redisTimeout) {
+
+        public RateLimit {
+            // An unset environment variable arrives as an empty string: treat it as "not set".
+            if (redisUrl != null && redisUrl.isBlank()) {
+                redisUrl = null;
+            }
+        }
+    }
 
     /** The identity provider whose tokens the edge accepts. */
     public record Oidc(

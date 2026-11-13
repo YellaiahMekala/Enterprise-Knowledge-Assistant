@@ -116,6 +116,8 @@ services:
       EKA_EDGE_OIDC_AUDIENCE: ${EKA_EDGE_OIDC_AUDIENCE:-eka-api}
       EKA_EDGE_SIGNING_KEY_FILE: ${EKA_EDGE_SIGNING_KEY_FILE:-}
       EKA_EDGE_EPHEMERAL_KEY: ${EKA_EDGE_EPHEMERAL_KEY:-true}
+      # Empty: rate limit counted in memory. redis://host:6379 shares it across edge replicas.
+      EKA_EDGE_RATE_LIMIT_REDIS_URL: ${EKA_EDGE_RATE_LIMIT_REDIS_URL:-}
       # Set EKA_EDGE_OTEL_ENABLED=true and the endpoint to http://jaeger:4318/v1/traces for traces.
       EKA_EDGE_OTEL_ENABLED: ${EKA_EDGE_OTEL_ENABLED:-false}
       EKA_EDGE_OTEL_ENDPOINT: ${EKA_EDGE_OTEL_ENDPOINT:-http://jaeger:4318/v1/traces}

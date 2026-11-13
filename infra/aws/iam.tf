@@ -23,7 +23,7 @@ resource "aws_iam_role_policy_attachment" "execution" {
 data "aws_iam_policy_document" "read_secrets" {
   statement {
     actions   = ["secretsmanager:GetSecretValue"]
-    resources = [aws_secretsmanager_secret.database_url.arn, aws_secretsmanager_secret.pseudonym.arn]
+    resources = [aws_secretsmanager_secret.database_url.arn, aws_secretsmanager_secret.pseudonym.arn, aws_secretsmanager_secret.cache_url.arn]
   }
 }
 

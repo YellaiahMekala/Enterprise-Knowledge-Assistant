@@ -76,3 +76,54 @@ variable "keep_data_on_destroy" {
   type        = bool
   default     = false
 }
+
+variable "api_min_tasks" {
+  description = "Fewest api tasks (edge + core). Two keeps one task up during a deploy or a task failure."
+  type        = number
+  default     = 2
+}
+
+variable "api_max_tasks" {
+  type    = number
+  default = 4
+}
+
+variable "api_requests_per_task_per_minute" {
+  description = "Scale out when the load balancer sends more than this many requests a minute to each task"
+  type        = number
+  default     = 600
+}
+
+variable "cache_node_type" {
+  description = "ElastiCache node for the shared rate limit"
+  type        = string
+  default     = "cache.t4g.micro"
+}
+
+variable "waf_requests_per_address_per_5m" {
+  description = "WAF blocks an address that sends more than this many requests in five minutes (minimum 10)"
+  type        = number
+  default     = 2000
+}
+
+variable "github_repository" {
+  description = "owner/name of the repository whose workflows may deploy, for example my-org/enterprise-knowledge-assistant"
+  type        = string
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", var.github_repository))
+    error_message = "Use the form owner/name."
+  }
+}
+
+variable "github_branch" {
+  description = "The only branch whose workflows may assume the deploy role"
+  type        = string
+  default     = "main"
+}
+
+variable "create_github_oidc_provider" {
+  description = "false if this AWS account already has GitHub's OIDC provider (only one is allowed per account)"
+  type        = bool
+  default     = true
+}

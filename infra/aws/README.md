@@ -13,6 +13,16 @@ Status: **written and validated (`terraform validate`), never applied.** Nothing
 | Secrets | Database URL and pseudonym secret in Secrets Manager, injected into the containers at start |
 | Identity | An external OIDC provider (variables `oidc_issuer`, `oidc_jwk_set_uri`); this stack does not create one |
 
+## Added in P13 (code only, not applied)
+| Piece | File | Notes |
+|---|---|---|
+| Autoscaling | `autoscaling.tf` | api service 2 to 4 tasks on CPU 60% and requests per task; worker stays at 1 |
+| Shared rate limit | `cache.tf` + edge `RedisRateLimiter` | ElastiCache Redis 7.1 with TLS and an auth token in a secret; the edge fails open if Redis is down, the WAF rate rule still applies |
+| WAF | `waf.tf` | per-address rate rule, three AWS managed rule groups, upload-size rule in count mode, blocked requests logged (authorization header redacted) |
+| Deploy role | `deploy_role.tf` | GitHub OIDC, one repository and one branch, ECR push, ECS update and migration run, pass the two task roles; cannot change infrastructure. Plus two immutable ECR repositories |
+
+New required variable: `github_repository`. Costs rise: two tasks minimum, an ElastiCache node and the WAF (roughly 5 USD plus per-request fees a month for the ACL and rules). Re-estimate before applying.
+
 ## Use
 ```bash
 cp terraform.tfvars.example terraform.tfvars    # fill in; the file is git-ignored
@@ -32,6 +42,6 @@ Every container writes to the log group `/<name>` (output `log_group`), one stre
 
 ## Known gaps
 - The edge generates its signing key at start (`EKA_EDGE_EPHEMERAL_KEY=true`), so a restart changes the key. The core refetches the key set on an unknown key id, but that path was only tested locally.
-- One task and no autoscaling. The rate limiter is in memory, so more than one edge task would multiply the limits.
 - Tasks run in public subnets with public IPs to avoid a NAT gateway. A production setup would use private subnets with a NAT gateway or VPC endpoints.
-- No WAF, no alarms wired to the alert rules, no CI deploy (an OIDC-based GitHub Actions role is the next step, so no keys are stored in GitHub).
+- No alarms wired to the alert rules, and no deploy workflow yet: the role exists, the workflow that assumes it does not.
+- The WAF, autoscaling, ElastiCache and OIDC role are validated only; none has run in an account. WAF rule behaviour (false positives on uploads, the rate rule's 5-minute window) needs a real request test.

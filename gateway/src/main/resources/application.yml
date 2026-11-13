@@ -84,3 +84,6 @@ eka:
     internal-token:
       signing-key-file: ${EKA_EDGE_SIGNING_KEY_FILE:}
       ephemeral-key: ${EKA_EDGE_EPHEMERAL_KEY:false}
+    rate-limit:
+      # Empty: counted in memory, per edge instance. A Redis URL shares one count across instances.
+      redis-url: ${EKA_EDGE_RATE_LIMIT_REDIS_URL:}

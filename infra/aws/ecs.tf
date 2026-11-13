@@ -67,7 +67,10 @@ resource "aws_ecs_task_definition" "api" {
         { name = "EKA_EDGE_OIDC_AUDIENCE", value = var.oidc_audience },
         { name = "EKA_EDGE_EPHEMERAL_KEY", value = "true" },
       ]
-      secrets          = [{ name = "EKA_EDGE_PSEUDONYM_SECRET", valueFrom = aws_secretsmanager_secret.pseudonym.arn }]
+      secrets = [
+        { name = "EKA_EDGE_PSEUDONYM_SECRET", valueFrom = aws_secretsmanager_secret.pseudonym.arn },
+        { name = "EKA_EDGE_RATE_LIMIT_REDIS_URL", valueFrom = aws_secretsmanager_secret.cache_url.arn },
+      ]
       logConfiguration = local.log
     },
   ])
@@ -77,8 +80,13 @@ resource "aws_ecs_service" "api" {
   name            = "${var.name}-api"
   cluster         = aws_ecs_cluster.main.id
   task_definition = aws_ecs_task_definition.api.arn
-  desired_count   = 1
+  desired_count   = var.api_min_tasks
   launch_type     = "FARGATE"
+
+  # Autoscaling owns the count after the first apply; the deploy role owns the task definition.
+  lifecycle {
+    ignore_changes = [desired_count, task_definition]
+  }
 
   network_configuration {
     subnets          = var.public_subnet_ids

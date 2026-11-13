@@ -11,6 +11,11 @@ permissions:
 jobs:
   edge:
     runs-on: ubuntu-latest
+    services:
+      # For the shared rate limiter tests; they skip without it.
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v5
@@ -20,6 +25,8 @@ jobs:
           cache: maven
       - name: Edge tests
         working-directory: gateway
+        env:
+          EKA_TEST_REDIS_URL: redis://127.0.0.1:6379
         run: mvn -B verify
       - name: Keep the tokens the edge minted for the core's interop test
         uses: actions/upload-artifact@v5

@@ -57,9 +57,8 @@ public class InternalTokenFilter implements GlobalFilter, Ordered {
                 .filter(JwtAuthenticationToken.class::isInstance)
                 .cast(JwtAuthenticationToken.class)
                 .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED)))
-                .flatMap(authentication -> {
-                    Identity identity = identities.from(authentication.getToken());
-                    RateLimiter.Decision decision = limiter.tryAcquire(identity.userId());
+                .map(authentication -> identities.from(authentication.getToken()))
+                .flatMap(identity -> limiter.tryAcquire(identity.userId()).flatMap(decision -> {
                     if (!decision.allowed()) {
                         long seconds = Math.max(1, decision.retryAfter().toSeconds());
                         exchange.getResponse().getHeaders().set(HttpHeaders.RETRY_AFTER, Long.toString(seconds));
@@ -86,7 +85,7 @@ public class InternalTokenFilter implements GlobalFilter, Ordered {
                             })
                             .build();
                     return chain.filter(exchange.mutate().request(request).build());
-                });
+                }));
     }
 
     @Override
