@@ -32,3 +32,16 @@ output "ecr_edge" {
 output "waf_log_group" {
   value = aws_cloudwatch_log_group.waf.name
 }
+
+output "alarm_queue_url" {
+  value = aws_sqs_queue.alarms.url
+}
+
+output "ecr_ops_agent" {
+  value = aws_ecr_repository.ops_agent.repository_url
+}
+
+output "ops_agent_secrets_to_set" {
+  description = "Put the real values with aws secretsmanager put-secret-value after apply"
+  value       = [for s in aws_secretsmanager_secret.ops_manual : s.name]
+}

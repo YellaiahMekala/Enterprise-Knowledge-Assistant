@@ -92,8 +92,13 @@ public class TriageService {
                     .append(" (severity ")
                     .append(alert.severity())
                     .append("): ")
-                    .append(alert.summary())
-                    .append('\n');
+                    .append(alert.summary());
+            // A CloudWatch alarm says why it fired, with the metric value: worth giving the model.
+            String reason = alert.annotations() == null ? "" : alert.annotations().getOrDefault("reason", "");
+            if (!reason.isBlank()) {
+                text.append(" Reason: ").append(reason.length() > 300 ? reason.substring(0, 300) : reason);
+            }
+            text.append('\n');
         }
         return text.toString();
     }

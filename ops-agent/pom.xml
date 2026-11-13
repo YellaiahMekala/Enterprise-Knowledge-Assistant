@@ -55,6 +55,12 @@
       <artifactId>cloudwatchlogs</artifactId>
       <version>${awssdk.version}</version>
     </dependency>
+    <!-- On AWS, CloudWatch alarms reach the agent through SNS and an SQS queue it polls. -->
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>sqs</artifactId>
+      <version>${awssdk.version}</version>
+    </dependency>
 
     <dependency>
       <groupId>org.springframework.boot</groupId>

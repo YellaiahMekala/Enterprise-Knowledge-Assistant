@@ -35,7 +35,7 @@ class ReportDeliveryTest {
 
     private static TriageService runbookTriage() {
         OpsProperties properties = new OpsProperties(
-                "t", "http://prometheus", "http://core", "http://edge", null, null,
+                "t", "http://prometheus", "http://core", "http://edge", null, null, null,
                 Path.of("../docs/runbooks.md"), 5, Duration.ofSeconds(1), null, null);
         return new TriageService(
                 properties, null, new ReadOnlyHttp(Duration.ofSeconds(1)), new RunbookReader(properties.runbookFile()));

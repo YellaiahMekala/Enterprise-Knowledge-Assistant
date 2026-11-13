@@ -33,6 +33,9 @@ ops:
   cloudwatch:
     log-group: ${OPS_AGENT_CLOUDWATCH_LOG_GROUP:}
     endpoint-url: ${OPS_AGENT_CLOUDWATCH_ENDPOINT_URL:}
+  # On AWS: the SQS queue CloudWatch alarms reach through SNS (Terraform output alarm_queue_url).
+  # Empty: only the Alertmanager webhook. Uses cloudwatch.endpoint-url too, for a local stand-in.
+  alarm-queue-url: ${OPS_AGENT_ALARM_QUEUE_URL:}
   runbook-file: ${OPS_AGENT_RUNBOOK_FILE:/app/runbooks.md}
   max-tool-calls: ${OPS_AGENT_MAX_TOOL_CALLS:5}
   mail:

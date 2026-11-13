@@ -94,6 +94,11 @@ resource "aws_ecs_service" "api" {
     assign_public_ip = true
   }
 
+  # api.<name>.internal for the triage agent's health checks.
+  service_registries {
+    registry_arn = aws_service_discovery_service.api.arn
+  }
+
   load_balancer {
     target_group_arn = aws_lb_target_group.edge.arn
     container_name   = "edge"

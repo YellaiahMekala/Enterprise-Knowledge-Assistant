@@ -57,6 +57,9 @@ public class OpsTools {
             if (problem != null) {
                 return "rejected: " + problem;
             }
+            if (prometheusUrl == null || prometheusUrl.isBlank()) {
+                return "Prometheus is not deployed here; use serviceHealth, searchLogs and the alarm's reason";
+            }
             return http.get(
                     prometheusUrl, "/api/v1/query?query=" + URLEncoder.encode(query, StandardCharsets.UTF_8));
         });

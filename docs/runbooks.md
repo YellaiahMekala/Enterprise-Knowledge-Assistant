@@ -73,6 +73,16 @@ Tuning variables: `EKA_EDGE_CB_WINDOW`, `EKA_EDGE_CB_MIN_CALLS`, `EKA_EDGE_CB_OP
 3. Agent up but deliveries still fail: Alertmanager's log shows the HTTP status. 401 means the token in `monitoring/secrets/webhook_token` differs from `OPS_AGENT_WEBHOOK_TOKEN`.
 4. The alert resolves on its own 10 minutes after the last failed delivery.
 
+**On AWS** the same alarm means a CloudWatch alarm has waited 15 minutes in the SQS queue `<name>-alarms`: the agent is not polling. Open the ECS service `<name>-ops-agent` and its log stream `eka/ops-agent/...`; check that the task role may read the queue. Open the CloudWatch alarms page for what is firing.
+
+## EkaAlertDeliveryDeadLetters
+
+**Meaning (AWS only):** alarm messages failed five times and SQS moved them to `<name>-alarms-dead`. Emailed directly, not through the agent.
+
+1. Read the messages in the dead-letter queue (SQS console, "Send and receive messages", poll). Each is a CloudWatch alarm notification; follow the runbook section of its `AlarmName`.
+2. Look in the agent's log stream for the error at the same time. The agent deletes messages it cannot parse, so a dead letter usually means the agent crashed while handling it.
+3. After the cause is fixed, purge the dead-letter queue; the alarm resolves when it is empty.
+
 ## EkaLlmFailoverBurst
 
 **Meaning:** a chat model failed (unavailable, or a timeout) before any text more than 5 times in 5 minutes, and the core moved those questions to the next model in `EKA_CHAT_FALLBACKS` (ADR-038). Users still get answers, from the fallback model, so this is a ticket, not a page.

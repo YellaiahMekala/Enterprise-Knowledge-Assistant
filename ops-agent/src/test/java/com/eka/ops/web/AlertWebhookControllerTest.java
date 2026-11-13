@@ -106,7 +106,7 @@ class AlertWebhookControllerTest {
     @Test
     void theServiceRefusesToStartWithoutAToken() {
         var properties = new com.eka.ops.config.OpsProperties(
-                " ", "http://p", "http://c", "http://e", null, null, java.nio.file.Path.of("x"), 3, java.time.Duration.ofSeconds(1), null, null);
+                " ", "http://p", "http://c", "http://e", null, null, null, java.nio.file.Path.of("x"), 3, java.time.Duration.ofSeconds(1), null, null);
         org.assertj.core.api.Assertions.assertThatThrownBy(
                         () -> new AlertWebhookController(properties, null, Runnable::run))
                 .isInstanceOf(IllegalStateException.class)

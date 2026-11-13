@@ -127,3 +127,40 @@ variable "create_github_oidc_provider" {
   type        = bool
   default     = true
 }
+
+variable "ops_agent_image" {
+  description = "The triage agent image built with ops-agent/Dockerfile.aws (runbooks included)"
+  type        = string
+}
+
+variable "ops_agent_model" {
+  type    = string
+  default = "gpt-4o-mini"
+}
+
+variable "alert_email" {
+  description = "Who receives triage reports and the watchdog alarms. Empty: no email subscription"
+  type        = string
+  default     = ""
+}
+
+variable "alert_email_from" {
+  type    = string
+  default = ""
+}
+
+variable "smtp_host" {
+  description = "For example email-smtp.eu-west-1.amazonaws.com (SES) or another provider"
+  type        = string
+  default     = ""
+}
+
+variable "smtp_port" {
+  type    = number
+  default = 587
+}
+
+variable "smtp_user" {
+  type    = string
+  default = ""
+}

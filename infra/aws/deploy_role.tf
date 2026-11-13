@@ -1,7 +1,7 @@
 # GitHub Actions deploys with a short-lived token from GitHub's OIDC provider: no AWS access key
 # is stored in GitHub. The role may be assumed only by workflows of one repository on one branch,
-# and may only push the two images, register task definitions, update the two services, run the
-# migration task and pass the two task roles. It cannot change this infrastructure.
+# and may only push the three images, register task definitions, update the three services, run the
+# migration task and pass the task roles. It cannot change this infrastructure.
 
 data "aws_partition" "current" {}
 
@@ -62,7 +62,7 @@ data "aws_iam_policy_document" "deploy" {
       "ecr:BatchGetImage",
       "ecr:GetDownloadUrlForLayer",
     ]
-    resources = [aws_ecr_repository.core.arn, aws_ecr_repository.edge.arn]
+    resources = [aws_ecr_repository.core.arn, aws_ecr_repository.edge.arn, aws_ecr_repository.ops_agent.arn]
   }
 
   # These two calls are not resource-scoped in IAM.
@@ -73,7 +73,7 @@ data "aws_iam_policy_document" "deploy" {
 
   statement {
     actions   = ["ecs:UpdateService", "ecs:DescribeServices"]
-    resources = [aws_ecs_service.api.id, aws_ecs_service.worker.id]
+    resources = [aws_ecs_service.api.id, aws_ecs_service.worker.id, aws_ecs_service.ops_agent.id]
   }
 
   statement {
@@ -88,8 +88,11 @@ data "aws_iam_policy_document" "deploy" {
   }
 
   statement {
-    actions   = ["iam:PassRole"]
-    resources = [aws_iam_role.execution.arn, aws_iam_role.task.arn]
+    actions = ["iam:PassRole"]
+    resources = [
+      aws_iam_role.execution.arn, aws_iam_role.task.arn,
+      aws_iam_role.ops_agent_execution.arn, aws_iam_role.ops_agent_task.arn,
+    ]
 
     condition {
       test     = "StringEquals"

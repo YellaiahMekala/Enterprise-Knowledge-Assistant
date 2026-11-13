@@ -166,6 +166,12 @@ Equal scores are expected: the stand-in answers with the same offline model. The
 - **Agent delivery tracking**: retries, sent/failed/pending counters, alerts `EkaTriageReportFailed` and `EkaTriageReportStuck`; drilled with a failing mail server.
 - **Readiness** waits for the embedding model; **traces** (NFR-07): set `EKA_OTEL_ENDPOINT` (core) and `EKA_EDGE_OTEL_ENABLED=true` (edge); `docker compose --profile monitoring up -d jaeger`, UI on 16686. Spans never carry text, keys or user ids. Verified end to end on 2026-11-12: one request through the edge showed edge, core and SQL spans in one Jaeger trace (statements parameterised, no token or user name in any attribute). The SQL instrumentation package pins SQLAlchemy below 2.1, so `tracing.py` skips its version check; a test guards that statements still produce spans.
 
+### Added in P13 and P14 (code and Terraform, never applied)
+
+- **Shared rate limit:** the edge counts per user in Redis when `EKA_EDGE_RATE_LIMIT_REDIS_URL` is set (one Lua script, Redis clock), so several edge tasks share one limit; fails open if Redis is down. Tested against a real Redis: two edge instances allowed 5 of 10 requests together, where in-memory counting allows 10.
+- **AWS hardening (`infra/aws`):** autoscaling of the api service (2 to 4 tasks), ElastiCache with TLS, WAF (managed rules and a per-address rate rule), GitHub OIDC deploy role and a manual deploy workflow, CloudWatch alarms named after the alert rules.
+- **Triage agent on AWS:** its own Fargate service with no inbound port; CloudWatch alarms reach it through SNS and an SQS queue it polls (`OPS_AGENT_ALARM_QUEUE_URL`), parsed into the same alerts Alertmanager sends. Tested with a stand-in SQS client; a test checks every alarm name has a runbook section.
+
 ### Not done
 
 | Item | Note |
@@ -176,10 +182,10 @@ Equal scores are expected: the stand-in answers with the same offline model. The
 | Entra ID or other hosted identity provider | Tested against Keycloak only |
 | Real email delivery | Verified only into a local mail catcher; real SMTP not tried |
 | Agent failing after it accepted an alert | The watchdog covers failed deliveries to the agent, not an agent that accepts the alert and then fails to send its email |
-| Agent log search with a live model | `searchLogs` was tested with a scripted model and against a real Loki, not with a live model |
-| Logs on AWS | The Terraform sends container logs to CloudWatch and the triage agent has a CloudWatch search adapter (`OPS_AGENT_CLOUDWATCH_LOG_GROUP`), tested against LocalStack only; the agent itself is not deployed by the Terraform and nothing ran on real AWS |
+| Logs on AWS | The Terraform sends container logs to CloudWatch and the triage agent searches them (`OPS_AGENT_CLOUDWATCH_LOG_GROUP`), tested against LocalStack only. The agent's Terraform and the alarm queue are validated, not applied; nothing ran on real AWS. The local Alloy collector does not ship to CloudWatch |
 | Web fallback beyond fixed entry pages | v1 fetches only the configured entry URLs (no search engine, no crawling), and only with the fake model so far. A page that the worker has not indexed within 30 s is used from the next question on |
-| Real Bedrock call, real AWS deployment | Needs an AWS account; the adapter has run end to end only against the local stand-in, and the Terraform is validated only |
+| Real Bedrock call, real AWS deployment | Needs an AWS account; the adapter has run end to end only against the local stand-in, and the Terraform (including WAF, autoscaling, alarms, the agent service and the deploy workflow) is validated only |
+| Browser script in CI | The UI's browser check runs by hand only |
 
 ## Tech stack
 

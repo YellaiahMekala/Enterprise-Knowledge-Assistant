@@ -1,5 +1,6 @@
 package com.eka.ops.config;
 
+import com.eka.ops.alert.SqsAlarmPoller;
 import com.eka.ops.delivery.ReportDelivery;
 import com.eka.ops.mail.ReportMailer;
 import com.eka.ops.mail.SmtpReportMailer;
@@ -12,6 +13,7 @@ import com.eka.ops.triage.TriageService;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import io.micrometer.core.instrument.MeterRegistry;
+import java.net.URI;
 import java.time.Duration;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -19,6 +21,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.mail.javamail.JavaMailSender;
+import software.amazon.awssdk.services.sqs.SqsClient;
 
 @Configuration
 public class AgentConfig {
@@ -79,5 +82,23 @@ public class AgentConfig {
     @Bean
     Executor triageExecutor() {
         return Executors.newVirtualThreadPerTaskExecutor();
+    }
+
+    /** Only with an alarm queue URL (AWS); polls on its own virtual thread until shutdown. */
+    @Bean(destroyMethod = "stop")
+    SqsAlarmPoller alarmPoller(OpsProperties properties, ReportDelivery delivery, Executor triageExecutor) {
+        String queueUrl = properties.alarmQueueUrl();
+        if (queueUrl == null || queueUrl.isBlank()) {
+            return null;
+        }
+        var builder = SqsClient.builder()
+                .overrideConfiguration(c -> c.apiCallTimeout(Duration.ofSeconds(30)));
+        String endpoint = properties.cloudwatch() == null ? null : properties.cloudwatch().endpointUrl();
+        if (endpoint != null && !endpoint.isBlank()) {
+            builder.endpointOverride(URI.create(endpoint));
+        }
+        SqsAlarmPoller poller = new SqsAlarmPoller(builder.build(), queueUrl, delivery, triageExecutor);
+        Thread.ofVirtual().name("alarm-queue").start(poller);
+        return poller;
     }
 }

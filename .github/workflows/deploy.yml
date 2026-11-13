@@ -1,0 +1,81 @@
+name: Deploy to AWS
+
+# Manual only, and only from the branch the deploy role trusts (infra/aws/deploy_role.tf).
+# No AWS key is stored in GitHub: the job gets a one-hour token from GitHub's OIDC provider.
+# Set these repository variables (Settings > Secrets and variables > Actions > Variables) from
+# `terraform output`: AWS_REGION, AWS_DEPLOY_ROLE_ARN, ECS_CLUSTER, NAME_PREFIX (the Terraform
+# `name`, default eka), ECR_CORE, ECR_EDGE, ECR_OPS_AGENT, MIGRATE_NETWORK (the
+# awsvpcConfiguration part of the migrate_command output).
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-aws
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: aws
+    env:
+      TAG: ${{ github.sha }}
+      PREFIX: ${{ vars.NAME_PREFIX }}
+      CLUSTER: ${{ vars.ECS_CLUSTER }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push the three images (tags are immutable, so a rerun of the same commit fails here)
+        run: |
+          docker build -t "${{ vars.ECR_CORE }}:$TAG" .
+          docker build -t "${{ vars.ECR_EDGE }}:$TAG" gateway
+          docker build -f ops-agent/Dockerfile.aws -t "${{ vars.ECR_OPS_AGENT }}:$TAG" .
+          docker push "${{ vars.ECR_CORE }}:$TAG"
+          docker push "${{ vars.ECR_EDGE }}:$TAG"
+          docker push "${{ vars.ECR_OPS_AGENT }}:$TAG"
+
+      - name: Register task definitions with the new images
+        run: |
+          # Copy each current definition, change only the images, register a new revision.
+          filter='del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
+            | .containerDefinitions |= map(
+                if (.name == "core" or .name == "worker" or .name == "migrate") then .image = $core
+                elif .name == "edge" then .image = $edge
+                elif .name == "ops-agent" then .image = $agent
+                else . end)'
+          for family in api worker migrate ops-agent; do
+            aws ecs describe-task-definition --task-definition "$PREFIX-$family" --query taskDefinition > current.json
+            jq --arg core "${{ vars.ECR_CORE }}:$TAG" --arg edge "${{ vars.ECR_EDGE }}:$TAG" \
+               --arg agent "${{ vars.ECR_OPS_AGENT }}:$TAG" "$filter" current.json > next.json
+            arn=$(aws ecs register-task-definition --cli-input-json file://next.json \
+                    --query taskDefinition.taskDefinitionArn --output text)
+            echo "registered $arn"
+            echo "TD_${family//-/_}=$arn" >> "$GITHUB_ENV"
+          done
+
+      - name: Migrate the database before the new code serves
+        run: |
+          task=$(aws ecs run-task --cluster "$CLUSTER" --launch-type FARGATE --task-definition "$TD_migrate" \
+            --network-configuration "${{ vars.MIGRATE_NETWORK }}" --query 'tasks[0].taskArn' --output text)
+          aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$task"
+          code=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$task" --query 'tasks[0].containers[0].exitCode' --output text)
+          echo "migration exit code: $code"
+          test "$code" = "0"
+
+      - name: Roll out the services and wait until they are stable
+        run: |
+          aws ecs update-service --cluster "$CLUSTER" --service "$PREFIX-api" --task-definition "$TD_api" > /dev/null
+          aws ecs update-service --cluster "$CLUSTER" --service "$PREFIX-worker" --task-definition "$TD_worker" > /dev/null
+          aws ecs update-service --cluster "$CLUSTER" --service "$PREFIX-ops-agent" --task-definition "$TD_ops_agent" > /dev/null
+          aws ecs wait services-stable --cluster "$CLUSTER" --services "$PREFIX-api" "$PREFIX-worker" "$PREFIX-ops-agent"

@@ -14,6 +14,7 @@ public record OpsProperties(
         String edgeManagementUrl,
         String lokiUrl,
         CloudWatch cloudwatch,
+        String alarmQueueUrl,
         Path runbookFile,
         @DefaultValue("5") int maxToolCalls,
         @DefaultValue("10s") Duration toolTimeout,
