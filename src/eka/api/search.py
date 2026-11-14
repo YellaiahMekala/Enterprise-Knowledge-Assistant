@@ -31,7 +31,7 @@ class SearchRequest(BaseModel):
 class ScoresOut(BaseModel):
     fused: float
     cosine: float
-    rerank: float | None = None  # set once reranking exists
+    rerank: float | None = None  # never set: SearchResultOut.from_hit does not copy the rerank score
 
 
 class SearchResultOut(BaseModel):
