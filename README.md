@@ -51,6 +51,25 @@ the history.
 | Web fallback (optional, off by default) | When the user's own documents give weak or no evidence, fetches owner-configured entry pages from an exact-host allowlist, stores each as the user's Markdown document with its URL and fetch time, lets the worker index it, then answers from those pages only; citations are typed `web` with URL and fetch date ([ADR-030](docs/adr/ADR-030-allowlisted-web-fallback.md)). The fetcher allows only https on allowlisted hosts, refuses names that resolve to private, loopback, link-local or metadata addresses, connects to the address it checked (TLS still verifies the host name), re-checks every redirect and caps size, time and content type | 63 tests (fetcher, HTML to Markdown, service, answering, settings, database columns). Live, against docs.python.org: first weak-evidence question answered from the fetched page in 14 s (47 chunks), the next question in 0.1 s from the stored copy, an off-topic question still refused; from inside the container `localhost` was refused as a private address, a redirect to a host off the list was refused, plain http was refused |
 | API contract | Postman collection | 36 assertions, 0 failures against the Compose stack |
 
+### Test evidence
+
+Per feature (what it proves, how to run, failure modes, talking points): [docs/testing/FEATURE_TESTING_GUIDE.md](docs/testing/FEATURE_TESTING_GUIDE.md).
+
+| Feature | Tests | How to run | Last result | CI or local |
+|---|---|---|---|---|
+| Core API, auth, isolation, ingestion, chat | 680 collected (79 need Docker) | `pytest -m "not integration"` | 2026-11-18: 594 passed, 5 skipped, 2 failed (stale edge-token fixture in `gateway/target`, not a code fault) | CI and local |
+| Core with real PostgreSQL | integration set | `pytest -m integration` | 2026-11-11 full suite: 616 passed, 5 skipped, coverage 91.1% (gate 85%) | CI and local |
+| Lint and types | ruff, mypy strict | `ruff check .`, `ruff format --check .`, `mypy src tests` | 2026-11-18: clean, 178 files formatted, 157 files typed | CI and local |
+| Retrieval evaluation | 44 questions, thresholds | `python -m eka.eval --check` | gate passes in CI; reports in `eval/reports/` | CI and local |
+| Live answers | 44 + 10 challenge | `python -m eka.tools.answer_run` | 2026-11-13 run; all 44 hand-scored 2026-11-18: 44 correct, 10 of 10 refused | local only (paid) |
+| Java edge | 47 | `cd gateway && mvn -B verify` | CI run 43393823859: green | CI and local |
+| Triage agent | 92 (live ones skip) | `cd ops-agent && mvn -B verify` | 92 green (README, 2026-11-18) | CI and local |
+| Triage failure drill (D1.1.6) | 3 injected failures | `scripts/triage_failure_drill.sh` | 2026-11-18: 14 of 14 checks | local only |
+| Web UI | 39 unit, 1 browser spec | `npx ng test --watch=false`; Playwright | 39 pass; 6 local browser passes; CI browser job green (run 44296520354, 2026-11-18) | CI and local |
+| API contract | 36 Postman assertions | Postman CLI as in `ci.yml` | 0 failures on the Compose stack | CI and local |
+| Alerts as code | 5 `promtool` cases | `promtool test rules` | pass | CI and local |
+| Restore drill | 1 script | `scripts/restore_drill.sh` | counts and RLS identical, 8 s | local only |
+
 ### Load, local run (10 users for 20 s, fake chat model, 13 documents)
 
 | Endpoint | Throughput | p50 | p95 | p99 | Errors |
@@ -120,7 +139,7 @@ Both defects were then traced and fixed (2026-11-11), and checked again with the
 
 Both fixes hold with the real model and nothing that was right before went wrong. Still one run with one model on a small set; the latency gap between the two runs is network and provider variance, not a code change.
 
-I read the 8 string-match misses, the refusal and the wrong citation. I did not read the other 36 answers, so the 43 of 44 figure is not a full hand score. Token counts are not returned by the API and were not recorded. One run, one model, questions written by the author: a sanity check, not a benchmark.
+All 44 answers of the rerun were then hand-scored against their source files (2026-11-18; the 8 misses read earlier, the other 36 now): 44 correct, 0 partial, 0 wrong, 44 grounded in the expected document; rubric and per-question table in [`eval/reports/live_p10a_hand_scoring.md`](eval/reports/live_p10a_hand_scoring.md). The first run's 43 of 44 was after reading its misses only. One reader who also wrote the questions, one run, one model, short single-fact questions: a sanity check, not a benchmark.
 
 **Triage agent, live run with log search (2026-11-13, P11).** Compose stack (core, worker, Prometheus, Alertmanager, Loki and Alloy, agent, mail catcher), `gpt-4o-mini`, a real fault: the database stopped for about a minute.
 
@@ -184,7 +203,7 @@ Equal scores are expected: the stand-in answers with the same offline model. The
 | Item | Note |
 |---|---|
 | Reranking on by default | Needs a larger evaluation set than 13 chunks (see ADR-032) |
-| Full hand scoring of live answers | Only the misses were read (see above) |
+| Independent scoring of live answers | All 44 were hand-scored by the author (see above); no second reader, no larger or harder question set |
 | Other models and the real cross-provider table | Only `gpt-4o-mini` was run live; the comparison pipeline is ready and needs Bedrock access (an AWS account and approval of the spend) |
 | Entra ID or other hosted identity provider | Tested against Keycloak only |
 | Real email delivery | Verified only into a local mail catcher; real SMTP not tried |
