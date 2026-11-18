@@ -63,10 +63,10 @@ class ReportDeliveryTest {
     @Test
     void aReportIsSentAndCounted() {
         ReportDelivery delivery = delivery(runbookTriage(), mailerFailing(0));
-        delivery.accepted();
+        ReportDelivery.Batch batch = delivery.accepted(FIRING);
         assertThat(delivery.pending()).isEqualTo(1);
 
-        delivery.deliver(FIRING);
+        delivery.deliver(batch);
 
         assertThat(sent).hasSize(1);
         assertThat(count("eka.ops.alerts.accepted")).isEqualTo(1);
@@ -79,8 +79,7 @@ class ReportDeliveryTest {
     @Test
     void aMailFailureIsRetriedWithBackoff() {
         ReportDelivery delivery = delivery(runbookTriage(), mailerFailing(2));
-        delivery.accepted();
-        delivery.deliver(FIRING);
+        delivery.deliver(delivery.accepted(FIRING));
 
         assertThat(sent).hasSize(1);
         assertThat(waits).containsExactly(Duration.ofSeconds(5), Duration.ofSeconds(10));
@@ -90,11 +89,10 @@ class ReportDeliveryTest {
     @Test
     void aReportThatCannotBeSentIsCountedAsFailedNotLost() {
         ReportDelivery delivery = delivery(runbookTriage(), mailerFailing(99));
-        delivery.accepted();
-        delivery.deliver(FIRING);
+        delivery.deliver(delivery.accepted(FIRING));
 
         assertThat(sent).isEmpty();
-        assertThat(waits).hasSize(2);
+        assertThat(waits).as("two waits for the report, two for the notice").hasSize(4);
         assertThat(count("eka.ops.reports.failed")).isEqualTo(1);
         assertThat(count("eka.ops.reports.sent")).isZero();
         assertThat(delivery.pending()).isZero();
@@ -110,8 +108,7 @@ class ReportDeliveryTest {
             }
         };
         ReportDelivery delivery = delivery(broken, mailerFailing(0));
-        delivery.accepted();
-        delivery.deliver(FIRING);
+        delivery.deliver(delivery.accepted(FIRING));
 
         assertThat(sent).hasSize(1);
         assertThat(sent.get(0).aiAssisted()).isFalse();
@@ -133,8 +130,8 @@ class ReportDeliveryTest {
             }
         };
         ReportDelivery delivery = delivery(slow, mailerFailing(0));
-        delivery.accepted();
-        Thread worker = Thread.ofVirtual().start(() -> delivery.deliver(FIRING));
+        ReportDelivery.Batch batch = delivery.accepted(FIRING);
+        Thread worker = Thread.ofVirtual().start(() -> delivery.deliver(batch));
 
         assertThat(registry.get("eka.ops.reports.pending").gauge().value()).isEqualTo(1.0);
         release.countDown();

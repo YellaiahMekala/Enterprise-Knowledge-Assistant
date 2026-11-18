@@ -14,10 +14,13 @@ import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.net.URI;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.mail.javamail.JavaMailSender;
@@ -73,10 +76,26 @@ public class AgentConfig {
         return new SmtpReportMailer(sender, properties.mail());
     }
 
-    /** Three tries to email a report, 5 s then 10 s apart, before it counts as failed. */
+    /**
+     * Three tries to email a report, 5 s then 10 s apart, before it counts as failed. An
+     * investigation past {@code ops.investigation-timeout} gives the runbook report. With
+     * {@code ops.journal-dir} set, batches a restart interrupted are finished at start-up.
+     */
     @Bean
-    ReportDelivery reportDelivery(TriageService triage, ReportMailer mailer, MeterRegistry registry) {
-        return new ReportDelivery(triage, mailer, registry, 3, Duration.ofSeconds(5), d -> Thread.sleep(d));
+    ReportDelivery reportDelivery(
+            TriageService triage,
+            ReportMailer mailer,
+            MeterRegistry registry,
+            @Value("${ops.investigation-timeout:3m}") Duration investigationTimeout,
+            @Value("${ops.journal-dir:}") String journalDir) {
+        Path journal = journalDir == null || journalDir.isBlank() ? null : Path.of(journalDir);
+        return new ReportDelivery(
+                triage, mailer, registry, 3, Duration.ofSeconds(5), d -> Thread.sleep(d), investigationTimeout, journal);
+    }
+
+    @Bean
+    ApplicationRunner recoverInterruptedBatches(ReportDelivery delivery, Executor triageExecutor) {
+        return args -> delivery.recover(triageExecutor);
     }
 
     @Bean

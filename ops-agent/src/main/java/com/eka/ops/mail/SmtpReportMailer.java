@@ -21,18 +21,28 @@ public class SmtpReportMailer implements ReportMailer {
 
     @Override
     public void send(TriageReport report) {
+        deliver(ReportFormatter.subject(report), ReportFormatter.body(report));
+        log.info("triage report sent: {}", ReportFormatter.subject(report));
+    }
+
+    @Override
+    public void sendNotice(String subject, String body) {
+        deliver(subject, body);
+        log.info("triage failure notice sent: {}", subject);
+    }
+
+    /** A missing recipient throws, so the batch counts as failed instead of looking sent. */
+    private void deliver(String subject, String body) {
         if (mail == null || mail.to() == null || mail.to().isBlank()) {
-            log.warn("no recipient configured (EKA_ALERT_EMAIL_TO); report not sent");
-            return;
+            throw new IllegalStateException("no recipient configured (EKA_ALERT_EMAIL_TO); nothing was sent");
         }
         SimpleMailMessage message = new SimpleMailMessage();
         message.setTo(mail.to());
         if (mail.from() != null && !mail.from().isBlank()) {
             message.setFrom(mail.from());
         }
-        message.setSubject(ReportFormatter.subject(report));
-        message.setText(ReportFormatter.body(report));
+        message.setSubject(subject);
+        message.setText(body);
         sender.send(message);
-        log.info("triage report sent: {}", ReportFormatter.subject(report));
     }
 }

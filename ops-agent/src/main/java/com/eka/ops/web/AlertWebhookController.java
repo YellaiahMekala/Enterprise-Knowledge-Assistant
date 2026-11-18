@@ -47,8 +47,8 @@ public class AlertWebhookController {
                 ? List.of()
                 : payload.alerts().stream().filter(a -> "firing".equals(a.status())).toList();
         if (!firing.isEmpty()) {
-            delivery.accepted();
-            executor.execute(() -> delivery.deliver(firing));
+            ReportDelivery.Batch batch = delivery.accepted(firing);
+            executor.execute(() -> delivery.deliver(batch));
         }
         return ResponseEntity.accepted().build();
     }

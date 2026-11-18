@@ -37,6 +37,10 @@ ops:
   # Empty: only the Alertmanager webhook. Uses cloudwatch.endpoint-url too, for a local stand-in.
   alarm-queue-url: ${OPS_AGENT_ALARM_QUEUE_URL:}
   runbook-file: ${OPS_AGENT_RUNBOOK_FILE:/app/runbooks.md}
+  # Longest an investigation may run before the runbook-only report is sent instead.
+  investigation-timeout: ${OPS_AGENT_INVESTIGATION_TIMEOUT:3m}
+  # Directory for accepted-but-unfinished batches, so a restart does not lose them. Empty: memory only.
+  journal-dir: ${OPS_AGENT_JOURNAL_DIR:}
   max-tool-calls: ${OPS_AGENT_MAX_TOOL_CALLS:5}
   mail:
     to: ${EKA_ALERT_EMAIL_TO:}

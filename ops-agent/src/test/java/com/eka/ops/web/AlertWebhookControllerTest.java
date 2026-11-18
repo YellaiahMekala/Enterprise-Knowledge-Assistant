@@ -95,7 +95,10 @@ class AlertWebhookControllerTest {
                 .contains("eka_ops_alerts_accepted_total")
                 .contains("eka_ops_reports_sent_total")
                 .contains("eka_ops_reports_failed_total")
-                .contains("eka_ops_reports_pending");
+                .contains("eka_ops_reports_pending")
+                .contains("eka_ops_reports_fallback_total")
+                .contains("eka_ops_notices_sent_total")
+                .contains("eka_ops_alerts_recovered_total");
     }
 
     @Test

@@ -106,12 +106,12 @@ Tuning variables: `EKA_EDGE_CB_WINDOW`, `EKA_EDGE_CB_MIN_CALLS`, `EKA_EDGE_CB_OP
 
 Also see **EkaTriageReportStuck** below.
 
-**Meaning:** the triage agent accepted an alert (it answered Alertmanager with 202) but its report did not go out. `EkaTriageReportFailed`: the email failed 3 times, 5 s and 10 s apart. `EkaTriageReportStuck`: an accepted alert has had no report for 15 minutes, so the investigation is hanging. Alertmanager sends these two alerts by email itself, not through the agent. The original alert is still active in Alertmanager.
+**Meaning:** the triage agent accepted an alert (it answered Alertmanager with 202) but its report did not go out. `EkaTriageReportFailed`: the email failed 3 times, 5 s and 10 s apart; the agent then also tried a short "[EKA] triage failed" notice (3 tries), which reaches you only if the mail server accepts it. `EkaTriageReportStuck`: an accepted alert has had no report for 15 minutes, so the investigation is hanging. Alertmanager sends these two alerts by email itself, not through the agent. The original alert is still active in Alertmanager.
 
 1. Read the original alert in Alertmanager (http://localhost:9093) and work it from this runbook directly; do not wait for the agent.
 2. Mail problem: `docker compose logs --since 30m ops-agent | grep "sending the report failed"` shows the exception class. Check `EKA_ALERT_SMTP_HOST`, `EKA_ALERT_SMTP_PORT` and the credentials; a `MailAuthenticationException` means a wrong or revoked password.
-3. Stuck: `docker compose logs --since 30m ops-agent` for a model call that never returned. Restart the agent (`docker compose --profile agent restart ops-agent`); pending work is lost, which is why the original alert stays in Alertmanager.
-4. Counts: `eka_ops_alerts_accepted_total`, `eka_ops_reports_sent_total`, `eka_ops_reports_failed_total` and `eka_ops_reports_pending` (Prometheus, job `ops-agent`).
+3. Stuck: `docker compose logs --since 30m ops-agent` for a model call that never returned. Restart the agent (`docker compose --profile agent restart ops-agent`). A batch the restart interrupted is finished at start-up from the journal (`eka_ops_alerts_recovered_total` counts them); the original alert also stays in Alertmanager.
+4. Counts: `eka_ops_alerts_accepted_total`, `eka_ops_reports_sent_total`, `eka_ops_reports_failed_total`, `eka_ops_reports_fallback_total` (runbook-only reports), `eka_ops_notices_sent_total`, `eka_ops_alerts_recovered_total` and `eka_ops_reports_pending` (Prometheus, job `ops-agent`). Every accepted batch ends as sent or failed, so accepted = sent + failed + pending.
 
 ## EkaTriageReportStuck
 
@@ -119,8 +119,22 @@ The triage agent accepted an alert (202) and has been working on it longer than 
 
 1. Work the original alert from this runbook directly; do not wait for the agent.
 2. `docker compose logs --since 30m ops-agent` for a model call that never returned or a slow Prometheus or log query.
-3. Restart the agent (`docker compose --profile agent restart ops-agent`); pending work is lost, which is why step 1 comes first.
+3. Restart the agent (`docker compose --profile agent restart ops-agent`); the journal finishes interrupted batches at start-up, but do step 1 first. An investigation normally ends by itself after 3 minutes (`OPS_AGENT_INVESTIGATION_TIMEOUT`) with a runbook-only report, so a batch pending for 15 minutes means something other than the model is stuck (mail, a lock).
 4. Check `eka_ops_reports_pending` (Prometheus, job `ops-agent`); it should fall back to 0.
+
+### Drill: an accepted alert must not be lost
+
+`scripts/triage_failure_drill.sh` (Java 21, curl, Docker for a throwaway mail catcher; no model call, no cost) runs the built jar against three injected failures and checks the end state of the alert:
+
+| Scenario | Injected fault | Expected end state |
+|---|---|---|
+| `model-down` | model endpoint refuses connections | runbook-only report emailed; `reports_fallback` 1, `failed` 0 |
+| `smtp-down` | mail server unreachable | `reports_failed` 1 (this is what `EkaTriageReportFailed` fires on), `pending` back to 0, nothing sent |
+| `restart` | a journal file left behind, as after a crash | report emailed after the next start; `alerts_recovered` 1; journal empty |
+
+Build first: `(cd ops-agent && mvn -B package -DskipTests)`. Run one scenario with its name, or all with no argument; the exit code is non-zero if any check fails. In `smtp-down` the failure notice cannot arrive either (same mail server), so the page comes from Prometheus and Alertmanager's own mail path; the notice path is covered by `ReportDeliveryFailureTest`.
+
+**Drill result, 2026-11-18, local (Windows, Git Bash, Java 21, mailpit v1.27):** 14 of 14 checks passed in about 2 minutes.
 
 ## Backup and restore
 

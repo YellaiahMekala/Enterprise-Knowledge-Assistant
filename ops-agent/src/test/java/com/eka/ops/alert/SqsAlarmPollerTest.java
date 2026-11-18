@@ -86,8 +86,8 @@ class SqsAlarmPollerTest {
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
         ReportDelivery delivery = new ReportDelivery((TriageService) null, (ReportMailer) null, registry, 1, Duration.ZERO, d -> {}) {
             @Override
-            public void deliver(List<Alert> firing) {
-                delivered.add(firing);
+            public void deliver(Batch batch) {
+                delivered.add(batch.alerts());
             }
         };
 

@@ -69,8 +69,8 @@ public class SqsAlarmPoller implements Runnable {
                 log.warn("dropped a queue message that is not a CloudWatch alarm notification");
             } else if ("firing".equals(alert.get().status())) {
                 List<Alert> firing = List.of(alert.get());
-                delivery.accepted();
-                executor.execute(() -> delivery.deliver(firing));
+                ReportDelivery.Batch batch = delivery.accepted(firing);
+                executor.execute(() -> delivery.deliver(batch));
                 handed++;
             }
             sqs.deleteMessage(DeleteMessageRequest.builder()

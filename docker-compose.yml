@@ -253,6 +253,8 @@ services:
       # A log group switches the searchLogs tool from Loki to CloudWatch Logs (needs AWS credentials).
       OPS_AGENT_CLOUDWATCH_LOG_GROUP: ${OPS_AGENT_CLOUDWATCH_LOG_GROUP:-}
       OPS_AGENT_RUNBOOK_FILE: /app/runbooks.md
+      # Accepted batches are kept here until their report is sent, so a restart finishes them.
+      OPS_AGENT_JOURNAL_DIR: /var/lib/ops-agent
       EKA_ALERT_EMAIL_TO: ${EKA_ALERT_EMAIL_TO:-}
       EKA_ALERT_EMAIL_FROM: ${EKA_ALERT_EMAIL_FROM:-}
       EKA_ALERT_SMTP_HOST: ${EKA_ALERT_SMTP_HOST:-mailpit}
@@ -264,6 +266,7 @@ services:
       EKA_CHAT_MODEL: ${EKA_CHAT_MODEL:-gpt-4o-mini}
     volumes:
       - ./docs/runbooks.md:/app/runbooks.md:ro
+      - ops-agent-journal:/var/lib/ops-agent
     ports:
       - "127.0.0.1:8090:8090"
 
@@ -295,3 +298,4 @@ volumes:
   eka-files:
   eka-models:
   eka-loki:
+  ops-agent-journal:
