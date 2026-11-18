@@ -43,7 +43,7 @@ the history.
 | Web UI (Angular) | Sign-in by API key (default build) or single sign-on through Keycloak (`--configuration sso`: authorization code with PKCE, bearer token to the edge, sign-out also ends the Keycloak session, an expired access token renewed with the refresh token before the next request); document upload and status, streamed chat with citations (web citations show the link and fetch date), conversation list | 39 unit tests (PKCE against the RFC 7636 example, state and nonce checks, one-use verifier, token exchange, refresh, one shared renewal for concurrent requests, session). API-key mode: a scripted browser run passed 10 times in a row. Single sign-on: real Chrome through Keycloak and the edge (sign-in, upload, cited answer, sign-out; signing in again asked for the password). Refresh: with the stored token marked expired, the app renewed it before the document list and before a streamed answer (both 200); a broken refresh token cleared the session and returned to the sign-in page |
 | Identity provider | Keycloak realm in Compose (`--profile idp`) with two test users and an `eka-admin` role | 7 end-to-end checks through the real edge (`scripts/keycloak_e2e.sh`): no or bad token 401, user 200, admin route 403 for a user and 200 for the admin, role claim mapped. Refresh tokens rotate (single use, 30-minute idle and 8-hour session limits): a refreshed token passed the edge, reusing the old refresh token was refused, and after that attempt Keycloak refused the newer one too |
 | File storage | Local disk (default) or S3 / any S3-compatible server (`EKA_STORAGE_BACKEND=s3`), chosen in one place | 9 tests against an in-process fake S3, and 2 against a real S3-compatible server in a container |
-| Reranking (experiment E3) | Optional cross-encoder over the top 20 candidates, off by default ([ADR-032](docs/adr/ADR-032-optional-cross-encoder-reranking.md)) | Evaluation: Hit@1 95.5% to 100%, MRR 0.977 to 1.000 (2 of 44 questions); about 560 ms extra per query on a laptop CPU |
+| Reranking (experiment E3) | Optional cross-encoder over the top 20 candidates, off by default ([ADR-032](docs/adr/ADR-032-optional-cross-encoder-reranking.md)); `scores.rerank` is returned when it is on | 96-question set, two chunk sizes: MRR 0.967 to 0.995 (paired interval +0.005 to +0.054) at 256 tokens, 0.946 to 0.981 at 64; but median search 16 ms to 745 ms, p95 1526 ms, so the latency rule failed and it stays off ([study](eval/reports/e3_rerank_study.md)) |
 | Incident triage agent (LangChain4j, Java 21) | Receives Alertmanager webhooks, investigates with 4 read-only tools (PromQL query, service health, runbook, log search in Loki or CloudWatch Logs), emails a report; token-protected, call budget, audit log, runbook-only fallback ([ADR-033](docs/adr/ADR-033-incident-triage-agent.md), [ADR-035](docs/adr/ADR-035-log-search-loki.md)) | 80 tests in CI run 43393823859, 7 skipped (Loki and CloudWatch live ones skip unless an endpoint is set) including the full tool loop with a scripted model (2 of them need a real Loki and passed against one); drills against the real stack: a synthetic alert and a real one (core stopped, Prometheus fired `EkaTargetDown`, email in about 4 minutes) both arrived in a local mail catcher. Not run with a live model or real SMTP |
 | Amazon Bedrock chat provider | `EKA_CHAT_PROVIDER=bedrock` through the Converse API, credentials from the AWS chain, no key in settings ([ADR-034](docs/adr/ADR-034-bedrock-provider-and-aws-deployment.md)). A local Converse stand-in (`python -m eka.tools.bedrock_stub`) lets the unchanged adapter and boto3 run without an account; `EKA_BEDROCK_ENDPOINT_URL` points at it and stays empty for real AWS | 10 tests against a stub client; 6 tests through real boto3 against the stand-in with fake keys (SigV4 signing, Converse JSON, the binary event stream); the 54 evaluation questions through the API with the Bedrock adapter, 54 answers recorded under the Bedrock model id. Never called Bedrock |
 | Provider comparison | `python -m eka.tools.answer_run` asks the evaluation questions through the API; `python -m eka.tools.compare_runs` puts two or more runs side by side (see below) | 3 tests; first table produced (below) |
@@ -57,14 +57,16 @@ Per feature (what it proves, how to run, failure modes, talking points): [docs/t
 
 | Feature | Tests | How to run | Last result | CI or local |
 |---|---|---|---|---|
-| Core API, auth, isolation, ingestion, chat | 680 collected (79 need Docker) | `pytest -m "not integration"` | 2026-11-18: 594 passed, 5 skipped, 2 failed (stale edge-token fixture in `gateway/target`, not a code fault) | CI and local |
+| Core API, auth, isolation, ingestion, chat | 693 collected (79 need Docker) | `pytest -m "not integration"` | 2026-11-18: 607 passed, 5 skipped, 2 failed (stale edge-token fixture in `gateway/target`, not a code fault) | CI and local |
 | Core with real PostgreSQL | integration set | `pytest -m integration` | 2026-11-11 full suite: 616 passed, 5 skipped, coverage 91.1% (gate 85%) | CI and local |
-| Lint and types | ruff, mypy strict | `ruff check .`, `ruff format --check .`, `mypy src tests` | 2026-11-18: clean, 178 files formatted, 157 files typed | CI and local |
-| Retrieval evaluation | 44 questions, thresholds | `python -m eka.eval --check` | gate passes in CI; reports in `eval/reports/` | CI and local |
+| Lint and types | ruff, mypy strict | `ruff check .`, `ruff format --check .`, `mypy src tests` | 2026-11-18: clean, 180 files formatted, 159 files typed | CI and local |
+| Retrieval evaluation | 96 questions (44 original + 52 synthetic), 24 challenge, thresholds | `python -m eka.eval --check` | 2026-11-18: gate passes locally on the 96 (Hit@3 100%, MRR 0.967); CI runs the same command | CI and local |
+| Reranking study (D1.2.5) | 10 unit tests; 96 questions, 2 chunk sizes, bootstrap intervals, latency | `python -m eka.eval.rerank_study` | 2026-11-18: quality better (5 better, 0 worse at 256 tokens; 7 better, 3 worse at 64), latency over the stated limits, so rerank stays off | local only (free: local models) |
 | Live answers | 44 + 10 challenge | `python -m eka.tools.answer_run` | 2026-11-13 run; all 44 hand-scored 2026-11-18: 44 correct, 10 of 10 refused | local only (paid) |
 | Java edge | 47 | `cd gateway && mvn -B verify` | CI run 43393823859: green | CI and local |
 | Triage agent | 92 (live ones skip) | `cd ops-agent && mvn -B verify` | 92 green (README, 2026-11-18) | CI and local |
 | Triage failure drill (D1.1.6) | 3 injected failures | `scripts/triage_failure_drill.sh` | 2026-11-18: 14 of 14 checks | local only |
+| Live triage agent and web fallback (PQ1.2.3) | 4 alerts; 14 fallback questions x 2 runs | `scripts/pq123_web_fallback_run.py`; alerts posted to the agent | 2026-11-18, `gpt-4o-mini`, USD 0.0076: 4 of 4 reports emailed, 19 audited tool calls, 1 of 4 reports fully correct; fallback hit rate 0 of 6 at default settings, 1 of 6 strict (4 of 6 grounded) with the gate raised to 0.72, never triggered on corpus-answerable questions; [report](eval/reports/pq1-2-3-live-triage-fallback-2026-11-18.md) | local only (paid) |
 | Web UI | 39 unit, 1 browser spec | `npx ng test --watch=false`; Playwright | 39 pass; 6 local browser passes; CI browser job green (run 44296520354, 2026-11-18) | CI and local |
 | API contract | 36 Postman assertions | Postman CLI as in `ci.yml` | 0 failures on the Compose stack | CI and local |
 | Alerts as code | 5 `promtool` cases | `promtool test rules` | pass | CI and local |
@@ -81,7 +83,7 @@ These are one laptop and a fake model, so a real model's latency would dominate 
 
 ### Measured
 
-Retrieval on a 44-question set over 13 short documents (one chunk each), BGE-small, 256-token chunks, run locally:
+Retrieval on the original 44-question set over 13 short documents (one chunk each), BGE-small, 256-token chunks, run locally (the set now has 96 questions, 52 of them synthetic additions; on all 96, rerank off: Hit@1 93.8%, Hit@3 100%, MRR 0.967; see the reranking study):
 
 | Metric | Value |
 |---|---|
@@ -202,7 +204,7 @@ Equal scores are expected: the stand-in answers with the same offline model. The
 
 | Item | Note |
 |---|---|
-| Reranking on by default | Needs a larger evaluation set than 13 chunks (see ADR-032) |
+| Reranking on by default | Evaluated on 96 questions (D1.2.5): better ranking, but p95 1.1 to 1.5 s against a 500 ms limit on a laptop CPU. Stays off; revisit with a GPU, a smaller `EKA_RERANKER_TOP` or a larger real corpus |
 | Independent scoring of live answers | All 44 were hand-scored by the author (see above); no second reader, no larger or harder question set |
 | Other models and the real cross-provider table | Only `gpt-4o-mini` was run live; the comparison pipeline is ready and needs Bedrock access (an AWS account and approval of the spend) |
 | Entra ID or other hosted identity provider | Tested against Keycloak only |
@@ -330,7 +332,7 @@ The chat provider (fake, OpenAI-compatible or Bedrock), file storage, reranker a
 | GET | `/health/ready` | none | Ready for traffic: the database answers (503 otherwise); returns the build version |
 | GET | `/api/v1/me` | caller | The caller's user id and role (behind the edge, answered by the edge) |
 | GET, POST, DELETE | `/api/v1/documents`, `/api/v1/documents/{id}` | caller | Upload (202 new, 200 same bytes), list, inspect (polling path for ingestion), delete |
-| POST | `/api/v1/search` | caller | Hybrid retrieval with filters, owner-scoped. `scores.rerank` is always `null`, even with the reranker on |
+| POST | `/api/v1/search` | caller | Hybrid retrieval with filters, owner-scoped. `scores.rerank` is the cross-encoder score when `EKA_RERANKER_MODEL` is set, otherwise `null` |
 | POST | `/api/v1/chat` | caller | Cited answer as JSON, or as a stream with `"stream": true` |
 | GET, DELETE | `/api/v1/conversations`, `/api/v1/conversations/{id}` | caller | Conversation history |
 | GET | `/api/v1/admin/status`, `/api/v1/admin/metrics` | admin | Build info; Prometheus metrics |

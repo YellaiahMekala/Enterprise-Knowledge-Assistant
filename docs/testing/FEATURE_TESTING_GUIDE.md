@@ -32,6 +32,8 @@ Secrets are environment variables, never written in this guide.
 | [F12](#f12-api-contract-and-postman) | API contract and Postman | default + Postman CLI | yes |
 | [F13](#f13-backup-and-restore-drill) | Backup and restore drill | stack drill | no |
 | [F14](#f14-web-fallback-and-providers) | Web fallback, Bedrock stand-in | default | yes |
+| [F15](#f15-reranking-study-d125) | Reranking study (D1.2.5) | default + integration DB | no |
+| [F16](#f16-live-triage-agent-and-web-fallback-pq123) | Live triage agent and web fallback (PQ1.2.3) | live model + stack | no |
 
 ## F1 Core API, authentication, isolation
 
@@ -106,7 +108,7 @@ wrong refusal). A real model's paraphrases can fail the overlap check; fake-mode
 ## F4 Retrieval evaluation gate
 
 **What it proves.** Retrieval quality does not regress: 44 questions on 13 documents with Hit@k, MRR and refusal checks
-against `eval/thresholds.json`.
+against `eval/thresholds.json`. The set is now 96 answerable questions (44 original, 52 synthetic, 33 labelled "hard") and 24 unanswerable.
 
 **Tests.** `tests/test_eval_harness.py` (default), `tests/integration/test_eval_runner.py`; the CI job "evaluation" runs
 `python -m eka.eval --check --out eval/reports/ci.md`.
@@ -309,3 +311,60 @@ the list; the Bedrock adapter signs and parses real Converse JSON through boto3 
 **Honest limits.** Never called real Bedrock or real AWS. Web fallback checked with the fake chat model only.
 
 **Talking points.** SSRF defence: the fetcher connects to the address it checked and re-checks every redirect.
+
+## F15 Reranking study (D1.2.5)
+
+**What it proves.** Whether the optional cross-encoder should be on by default, decided by a rule written before the
+run: MRR and Hit@3 no more than 0.01 lower, no more questions worse than better, p95 search at most 500 ms, median
+added at most 250 ms, in every configuration. Result on 96 questions (synthetic, author-written), chunks of 256 and 64
+tokens: quality better (MRR +0.028 and +0.035, paired intervals above zero), latency far over the limits (p95 1526 and
+1079 ms), so reranking stays off ([ADR-032](../adr/ADR-032-optional-cross-encoder-reranking.md)).
+
+**Tests.** `tests/test_rerank_study.py` (percentiles, bootstrap, nDCG, changed cases, decision rule, report),
+`tests/test_retrieval_service.py` (hits carry the rerank score; the search response exposes it),
+`tests/test_eval_harness.py` (question set size and labels).
+
+**How to run.** Unit: `pytest tests/test_rerank_study.py tests/test_retrieval_service.py tests/test_eval_harness.py`.
+Study: start a throwaway pgvector database, `alembic upgrade head`, then `python -m eka.eval.rerank_study` (about 10
+minutes; local embedder and cross-encoder from `data/models`, no paid call, no language model). Report:
+`eval/reports/e3_rerank_study.md`.
+
+**Expected.** Unit tests green offline. The study writes the report and ends with a PASS or FAIL line per check.
+
+**Honest limits.** One author wrote corpus and questions; the corpus is 13 short files. The intervals show noise over
+these questions only. Latency is one laptop CPU with Docker running; a GPU or smaller `EKA_RERANKER_TOP` would change
+it. The refusal gate (dense cosine) is not changed by reranking, and on the 24 unanswerable questions it lets 22
+through at 0.50, so the model's own refusal carries most of the near-miss negatives.
+
+**Talking points.** Set the decision rule before measuring; report both the quality gain and the latency cost; keep the
+default off when the rule fails, and say why.
+
+## F16 Live triage agent and web fallback (PQ1.2.3)
+
+**What it proves.** With a live model against the Compose stack: four alerts (3 posted by hand, 1 real) led to four
+emailed reports in 10 to 16 s with 19 audited read-only tool calls and 18 model calls (17,924 prompt and 1,207
+completion tokens, USD 0.0034). Web fallback on 14 questions, twice: never triggered for the 8 corpus-answerable
+asks; unanswerable ones refused every time; but with default settings it triggered on 1 of 10 corpus-miss questions
+(0 of 6 answerable from the allowlisted pages). With the refusal gate raised to 0.72: 1 of 6 triggered and grounded,
+4 of 6 grounded answers counting stored copies.
+
+**Tests.** No new unit tests. Evidence: `eval/reports/pq1-2-3-live-triage-fallback-2026-11-18.md` and two answers
+files `eval/reports/pq1-2-3-fallback-answers-gate050.jsonl`, `...-gate072.jsonl`. Runner:
+`scripts/pq123_web_fallback_run.py`.
+
+**How to run.** Start the `agent` and `monitoring` profiles with the chat provider set on the `api` service (the base
+compose file does not pass it), web fallback on with an allowlisted host and entry URLs, then post alerts to
+`/alerts` with the webhook token and run the script with `EKA_RUN_KEY` set to a user key. Needs the OpenAI key in the
+environment and approved spend. Mail goes to Mailpit.
+
+**Expected.** One mail per alert; audit lines `tool=... call=N`; the script prints one line per question with
+fallback and refusal flags.
+
+**Failure modes.** The fallback trigger is the best of the top 5 dense cosines below 0.50, which off-topic questions
+usually pass on a small corpus. After the first fetch, weak questions are not redirected to the stored pages inside the
+refresh window. The agent keeps no token counts, so a counting proxy was used. Three reports had a wrong or guessed
+cause because the edge was not in the stack.
+
+**Talking points.** State the rubric before the run; report the miss (fallback hit rate near zero by default) with the
+cause found in the cosines; keep the tuned-gate run labelled as tuned on the same questions.
+

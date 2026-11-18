@@ -8,3 +8,17 @@
 {"id": "c08", "question": "What are the quarterly revenue targets?"}
 {"id": "c09", "question": "Who is the chief executive officer?"}
 {"id": "c10", "question": "Can suppliers be paid in cryptocurrency?"}
+{"id": "c11", "question": "How many days of sick leave does a contractor get?", "source": "synthetic"}
+{"id": "c12", "question": "What is the maximum amount reimbursable for a laptop purchase?", "source": "synthetic"}
+{"id": "c13", "question": "How long are customer support call recordings kept?", "source": "synthetic"}
+{"id": "c14", "question": "How often must employees change their own login passwords?", "source": "synthetic"}
+{"id": "c15", "question": "How many days of paid leave do I get for my own wedding?", "source": "synthetic"}
+{"id": "c16", "question": "How many weeks of unpaid leave can I take?", "source": "synthetic"}
+{"id": "c17", "question": "What is the response time for a SEV4 incident?", "source": "synthetic"}
+{"id": "c18", "question": "What mileage rate is paid for using a personal car on business?", "source": "synthetic"}
+{"id": "c19", "question": "How often do employees get a performance review?", "source": "synthetic"}
+{"id": "c20", "question": "What is the notice period when I resign?", "source": "synthetic"}
+{"id": "c21", "question": "Which VPN client should I install?", "source": "synthetic"}
+{"id": "c22", "question": "What is the monthly gym allowance?", "source": "synthetic"}
+{"id": "c23", "question": "What does error code E-7001 mean?", "source": "synthetic"}
+{"id": "c24", "question": "How much is the employee contribution for the pension plan?", "source": "synthetic"}

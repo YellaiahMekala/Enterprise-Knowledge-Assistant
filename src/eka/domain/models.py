@@ -185,6 +185,7 @@ class SearchHit:
     cosine: float
     source_url: str | None = None
     fetched_at: datetime | None = None
+    rerank: float | None = None  # cross-encoder score, set only when a reranker ordered the hit
 
 
 # --- answering (phase P4) ------------------------------------------------------------------------

@@ -90,7 +90,7 @@ def test_every_shipped_question_points_at_a_real_document_and_a_real_phrase() ->
     for q in questions:
         source = (EVAL_DIR / "corpus" / q.doc).read_text(encoding="utf-8")
         assert q.gold.lower() in source.lower(), f"{q.id}: gold text not in {q.doc}"
-        assert q.kind in {"lexical", "paraphrase", "exact"}, q.id
+        assert q.kind in {"lexical", "paraphrase", "exact", "hard"}, q.id
 
 
 def test_the_challenge_set_is_present_and_has_unique_ids() -> None:
@@ -162,3 +162,17 @@ def test_any_document_lets_the_text_alone_decide() -> None:
     assert is_relevant(other, QUESTION, any_document=True)
     assert first_relevant_rank([other], QUESTION, any_document=True) == 1
     assert first_relevant_rank([other], QUESTION) is None
+
+
+def test_the_question_set_is_at_least_doubled_and_the_new_rows_are_labelled_synthetic() -> None:
+    import json
+
+    rows = [
+        json.loads(line)
+        for line in (EVAL_DIR / "questions.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    assert len(rows) >= 88
+    assert sum(1 for r in rows if r.get("kind") == "hard") >= 20
+    assert all(r.get("source") == "synthetic" for r in rows[44:])
+    challenge = load_challenge(EVAL_DIR / "challenge.jsonl")
+    assert len(challenge) >= 20

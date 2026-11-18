@@ -6,6 +6,7 @@ run this against a dedicated database.
 """
 
 import tempfile
+import time
 from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import partial
@@ -18,7 +19,7 @@ from eka.adapters.db.search import SqlChunkSearch
 from eka.adapters.storage_local import LocalFileStore
 from eka.domain.models import DocumentStatus, ParseLimits, Role, SearchFilters
 from eka.eval.dataset import ChallengeQuestion, Question
-from eka.eval.metrics import QuestionResult, first_relevant_rank
+from eka.eval.metrics import QuestionResult, first_relevant_rank, is_relevant
 from eka.ingestion.parse import parse_document
 from eka.ports.embedder import Embedder
 from eka.ports.reranker import Reranker
@@ -113,15 +114,23 @@ async def run_questions(
             SqlChunkSearch(session), embedder, config.retrieval, config.reranker
         )
         for question in questions:
+            started = time.perf_counter()
             hits = await service.search(
                 owner, question.question, top_k=config.top_k, filters=SearchFilters()
             )
+            latency_ms = (time.perf_counter() - started) * 1000
             results.append(
                 QuestionResult(
                     question=question,
                     rank=first_relevant_rank(hits, question, any_document=config.any_document),
                     top_cosine=max((h.cosine for h in hits[:GATE_TOP_K]), default=None),
                     retrieved=tuple(h.filename for h in hits),
+                    relevant_ranks=tuple(
+                        position
+                        for position, h in enumerate(hits, start=1)
+                        if is_relevant(h, question, any_document=config.any_document)
+                    ),
+                    latency_ms=latency_ms,
                 )
             )
     return results

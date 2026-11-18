@@ -22,6 +22,18 @@ Add a `Reranker` port with a fastembed cross-encoder adapter (`Xenova/ms-marco-M
 
 Latency: about 560 ms median for 20 passages of about 130 tokens on a laptop CPU, measured once with five repetitions, which is more than half of the 1 s search SLO.
 
+## Update 2026-11-18 (D1.2.5): larger evaluation, default stays off
+The review trigger asked for a larger evaluation set. It now has 96 answerable questions (52 added, synthetic, author-written, 33 labelled hard) and 24 unanswerable, run at two chunk sizes with a decision rule fixed before the run (`python -m eka.eval.rerank_study`, report `eval/reports/e3_rerank_study.md`).
+
+| Configuration | Hit@1 | MRR (95% interval) | nDCG@10 | Search p50 / p95 |
+|---|---|---|---|---|
+| 256 tokens, 13 chunks, off | 93.8% | 0.967 (0.939 to 0.990) | 0.976 | 16 / 23 ms |
+| 256 tokens, on | 99.0% | 0.995 (0.984 to 1.000) | 0.996 | 745 / 1526 ms |
+| 64 tokens, 34 chunks, off | 90.6% | 0.946 (0.910 to 0.977) | 0.960 | 35 / 105 ms |
+| 64 tokens, on | 96.9% | 0.981 (0.957 to 1.000) | 0.985 | 509 / 1079 ms |
+
+The paired MRR gain is +0.028 (+0.005 to +0.054) at 256 tokens and +0.035 (+0.003 to +0.071) at 64. At 256 tokens 5 questions got better and none worse; at 64 tokens 7 got better and 3 worse. Quality passed the rule. Latency failed it (p95 limit 500 ms, median added limit 250 ms), so the default stays off. The earlier 560 ms figure was optimistic for this laptop; both numbers depend on passage length and CPU. The reranker score is now returned as `scores.rerank` in the search response when the reranker is on. Reconsider with a GPU, a smaller `EKA_RERANKER_TOP`, or a quantized or smaller cross-encoder. The corpus is still 13 short files by one author, so the gain is a measured result on this set, not a general claim.
+
 ## Options considered
 | Option | Assessment |
 |---|---|

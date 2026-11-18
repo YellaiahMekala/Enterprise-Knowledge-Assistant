@@ -105,8 +105,9 @@ class RetrievalService:
         )
         by_id = {candidate.chunk_id: candidate for candidate in (*dense, *sparse)}
         ordered = sorted(fused, key=lambda chunk_id: -fused[chunk_id])
+        rerank_scores: dict[UUID, float] = {}
         if self._reranker is not None and ordered:
-            ordered = await self._rerank(question, ordered, by_id)
+            ordered, rerank_scores = await self._rerank(question, ordered, by_id)
         best = ordered[:top_k]
 
         similarity = {c.chunk_id: 1.0 - c.score for c in dense}
@@ -134,13 +135,14 @@ class RetrievalService:
                     cosine=similarity[chunk_id],
                     source_url=document.source_url,
                     fetched_at=document.fetched_at,
+                    rerank=rerank_scores.get(chunk_id),
                 )
             )
         return hits
 
     async def _rerank(
         self, question: str, ordered: list[UUID], by_id: dict[UUID, Candidate]
-    ) -> list[UUID]:
+    ) -> tuple[list[UUID], dict[UUID, float]]:
         """Re-order the head of the fused list by cross-encoder score. The tail keeps its order.
         ``fused`` stays the RRF score, so the answer step and the refusal gate are unaffected."""
         assert self._reranker is not None
@@ -148,10 +150,9 @@ class RetrievalService:
         scores = await asyncio.to_thread(
             self._reranker.score, question, [by_id[chunk_id].text for chunk_id in head]
         )
-        reranked = [
-            chunk_id for _, chunk_id in sorted(zip(scores, head, strict=True), key=lambda p: -p[0])
-        ]
-        return reranked + ordered[len(head) :]
+        by_score = sorted(zip(scores, head, strict=True), key=lambda p: -p[0])
+        reranked = [chunk_id for _, chunk_id in by_score]
+        return reranked + ordered[len(head) :], {chunk_id: score for score, chunk_id in by_score}
 
 
 RetrievalServiceFactory = Callable[

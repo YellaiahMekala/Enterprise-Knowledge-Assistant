@@ -31,7 +31,7 @@ class SearchRequest(BaseModel):
 class ScoresOut(BaseModel):
     fused: float
     cosine: float
-    rerank: float | None = None  # never set: from_hit does not copy the rerank score
+    rerank: float | None = None  # set only when the cross-encoder is on (EKA_RERANKER_MODEL)
 
 
 class SearchResultOut(BaseModel):
@@ -52,7 +52,7 @@ class SearchResultOut(BaseModel):
             filename=hit.filename,
             locator=dict(hit.locator),
             text=hit.text,
-            scores=ScoresOut(fused=hit.fused, cosine=hit.cosine),
+            scores=ScoresOut(fused=hit.fused, cosine=hit.cosine, rerank=hit.rerank),
         )
 
 

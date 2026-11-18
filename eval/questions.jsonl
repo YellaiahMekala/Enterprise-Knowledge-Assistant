@@ -42,3 +42,55 @@
 {"id": "q42", "kind": "lexical", "question": "What does an employee pay per month for the Health Plus plan?", "doc": "benefits.csv", "gold": "Health Plus"}
 {"id": "q43", "kind": "exact", "question": "What is the maximum number of attempts in RetryPolicy?", "doc": "RetryPolicy.java", "gold": "MAX_ATTEMPTS = 5"}
 {"id": "q44", "kind": "paraphrase", "question": "What is the starting delay of the exponential backoff in the retry class?", "doc": "RetryPolicy.java", "gold": "INITIAL_DELAY_MS = 200"}
+{"id": "q45", "kind": "hard", "question": "Can a manager approve a 600 USD expense on their own?", "doc": "expense_policy.md", "gold": "Managers approve expenses up to 500 USD", "source": "synthetic"}
+{"id": "q46", "kind": "hard", "question": "Who must sign off on spending above 5,000 USD?", "doc": "expense_policy.md", "gold": "needs the CFO", "source": "synthetic"}
+{"id": "q47", "kind": "lexical", "question": "How many days of paid sick leave do I get per year?", "doc": "leave_policy.md", "gold": "10 days of paid sick leave", "source": "synthetic"}
+{"id": "q48", "kind": "paraphrase", "question": "How long can the second parent stay home after a birth?", "doc": "leave_policy.md", "gold": "secondary caregiver receives 6 weeks", "source": "synthetic"}
+{"id": "q49", "kind": "hard", "question": "Within what period after a birth must parental leave be taken?", "doc": "leave_policy.md", "gold": "within 12 months of the birth or adoption", "source": "synthetic"}
+{"id": "q50", "kind": "paraphrase", "question": "How many leftover vacation days may move into next year?", "doc": "leave_policy.md", "gold": "Up to 5 unused days", "source": "synthetic"}
+{"id": "q51", "kind": "hard", "question": "Is the hotel limit lower in a small city than in a major one?", "doc": "travel_policy.md", "gold": "150 USD per night in all other cities", "source": "synthetic"}
+{"id": "q52", "kind": "hard", "question": "What happens to my meal allowance when the host pays for lunch?", "doc": "travel_policy.md", "gold": "Meals provided by the host are deducted", "source": "synthetic"}
+{"id": "q53", "kind": "hard", "question": "Who approves business class flights?", "doc": "travel_policy.md", "gold": "written approval from a vice president", "source": "synthetic"}
+{"id": "q54", "kind": "hard", "question": "What if I book a flight 5 days before departure?", "doc": "travel_policy.md", "gold": "Bookings made later need approval from the department head", "source": "synthetic"}
+{"id": "q55", "kind": "hard", "question": "How big a car can I rent when travelling alone?", "doc": "travel_policy.md", "gold": "Rent a compact car", "source": "synthetic"}
+{"id": "q56", "kind": "paraphrase", "question": "Which flights must be in economy?", "doc": "travel_policy.md", "gold": "Economy class is required for flights shorter than 6 hours", "source": "synthetic"}
+{"id": "q57", "kind": "lexical", "question": "Which expenses are never reimbursed?", "doc": "expense_policy.md", "gold": "traffic fines", "source": "synthetic"}
+{"id": "q58", "kind": "hard", "question": "I lost the receipt for a 40 dollar lunch. What do I do?", "doc": "expense_policy.md", "gold": "signed statement", "source": "synthetic"}
+{"id": "q59", "kind": "hard", "question": "What happens if I submit an expense report after 45 days?", "doc": "expense_policy.md", "gold": "paid only with director approval", "source": "synthetic"}
+{"id": "q60", "kind": "paraphrase", "question": "Into which account is reimbursement paid?", "doc": "expense_policy.md", "gold": "bank account on file", "source": "synthetic"}
+{"id": "q61", "kind": "lexical", "question": "Is multi-factor authentication required?", "doc": "security_policy.md", "gold": "Multi-factor authentication is mandatory", "source": "synthetic"}
+{"id": "q62", "kind": "hard", "question": "Where should API secrets be kept instead of source code?", "doc": "security_policy.md", "gold": "use the secrets manager", "source": "synthetic"}
+{"id": "q63", "kind": "lexical", "question": "Are laptops encrypted?", "doc": "security_policy.md", "gold": "full-disk encryption", "source": "synthetic"}
+{"id": "q64", "kind": "hard", "question": "Who do I tell when my laptop is stolen?", "doc": "security_policy.md", "gold": "security desk", "source": "synthetic"}
+{"id": "q65", "kind": "paraphrase", "question": "Should I open attachments from people I do not know?", "doc": "security_policy.md", "gold": "Do not click links or open attachments", "source": "synthetic"}
+{"id": "q66", "kind": "hard", "question": "How many days of the week can I work from home?", "doc": "remote_work.md", "gold": "2 days remote", "source": "synthetic"}
+{"id": "q67", "kind": "hard", "question": "Do I need a VPN when working from a cafe?", "doc": "remote_work.md", "gold": "VPN connection is required", "source": "synthetic"}
+{"id": "q68", "kind": "hard", "question": "Who must approve me working from another country?", "doc": "remote_work.md", "gold": "prior approval from HR", "source": "synthetic"}
+{"id": "q69", "kind": "paraphrase", "question": "What does the home office stipend cover?", "doc": "remote_work.md", "gold": "desk, chair or monitor", "source": "synthetic"}
+{"id": "q70", "kind": "paraphrase", "question": "During which hours should everyone be reachable?", "doc": "remote_work.md", "gold": "Core collaboration hours", "source": "synthetic"}
+{"id": "q71", "kind": "hard", "question": "How soon after joining must I complete the security and conduct trainings?", "doc": "onboarding.md", "gold": "within the first 2 weeks", "source": "synthetic"}
+{"id": "q72", "kind": "paraphrase", "question": "Where do I pick up my laptop on the first day?", "doc": "onboarding.md", "gold": "front desk", "source": "synthetic"}
+{"id": "q73", "kind": "hard", "question": "How fast is standard system access granted?", "doc": "onboarding.md", "gold": "2 business days", "source": "synthetic"}
+{"id": "q74", "kind": "lexical", "question": "What is the 30-60-90 plan?", "doc": "onboarding.md", "gold": "30-60-90 day plan", "source": "synthetic"}
+{"id": "q75", "kind": "hard", "question": "What is a SEV2?", "doc": "incident_response.md", "gold": "degraded service with a workaround", "source": "synthetic"}
+{"id": "q76", "kind": "hard", "question": "How soon is an incident commander named for a major outage?", "doc": "incident_response.md", "gold": "within 15 minutes", "source": "synthetic"}
+{"id": "q77", "kind": "hard", "question": "What counts as a SEV1?", "doc": "incident_response.md", "gold": "customer-facing outage or data exposure", "source": "synthetic"}
+{"id": "q78", "kind": "paraphrase", "question": "What kind of review follows a serious incident?", "doc": "incident_response.md", "gold": "blameless postmortem", "source": "synthetic"}
+{"id": "q79", "kind": "hard", "question": "How long do we keep application logs?", "doc": "data_retention.md", "gold": "13 months", "source": "synthetic"}
+{"id": "q80", "kind": "hard", "question": "What overrides the retention period?", "doc": "data_retention.md", "gold": "legal hold overrides", "source": "synthetic"}
+{"id": "q81", "kind": "lexical", "question": "What happens to financial records after 7 years?", "doc": "data_retention.md", "gold": "kept for 7 years and then deleted", "source": "synthetic"}
+{"id": "q82", "kind": "hard", "question": "What check does a new vendor that handles company data need?", "doc": "procurement.md", "gold": "security review", "source": "synthetic"}
+{"id": "q83", "kind": "hard", "question": "What happens to an invoice with no purchase order?", "doc": "procurement.md", "gold": "returned to the requester", "source": "synthetic"}
+{"id": "q84", "kind": "hard", "question": "How many quotes do I need for a 12,000 dollar purchase?", "doc": "procurement.md", "gold": "three written quotes", "source": "synthetic"}
+{"id": "q85", "kind": "lexical", "question": "Do I need a purchase order before buying?", "doc": "procurement.md", "gold": "Raise a purchase order before buying", "source": "synthetic"}
+{"id": "q86", "kind": "hard", "question": "Who should I tell about a possible conflict of interest?", "doc": "code_of_conduct.txt", "gold": "disclosed to your manager and to compliance", "source": "synthetic"}
+{"id": "q87", "kind": "paraphrase", "question": "What if I am offered a 200 dollar gift?", "doc": "code_of_conduct.txt", "gold": "declined or reported to compliance", "source": "synthetic"}
+{"id": "q88", "kind": "hard", "question": "Is there protection for people who report concerns?", "doc": "code_of_conduct.txt", "gold": "does not tolerate retaliation", "source": "synthetic"}
+{"id": "q89", "kind": "exact", "question": "What does E-6100 mean?", "doc": "error_codes.md", "gold": "merchant account is suspended", "source": "synthetic"}
+{"id": "q90", "kind": "hard", "question": "A payment failed because the bank rejected the card. What do I tell the customer?", "doc": "error_codes.md", "gold": "use another card", "source": "synthetic"}
+{"id": "q91", "kind": "hard", "question": "Which error says the gateway timed out?", "doc": "error_codes.md", "gold": "payment gateway timed out", "source": "synthetic"}
+{"id": "q92", "kind": "lexical", "question": "What is the employer monthly contribution for the Dental plan?", "doc": "benefits.csv", "gold": "Dental", "source": "synthetic"}
+{"id": "q93", "kind": "hard", "question": "How much does the Vision plan cost the employee each month?", "doc": "benefits.csv", "gold": "Vision", "source": "synthetic"}
+{"id": "q94", "kind": "hard", "question": "What coverage does the life insurance give?", "doc": "benefits.csv", "gold": "2x annual salary", "source": "synthetic"}
+{"id": "q95", "kind": "hard", "question": "Is a retry allowed for a call that is not idempotent?", "doc": "RetryPolicy.java", "gold": "idempotent && attempt < MAX_ATTEMPTS", "source": "synthetic"}
+{"id": "q96", "kind": "hard", "question": "What happens when the attempt number is outside the allowed range?", "doc": "RetryPolicy.java", "gold": "IllegalArgumentException", "source": "synthetic"}

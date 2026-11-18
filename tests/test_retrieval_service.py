@@ -6,7 +6,8 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from eka.domain.models import SearchFilters
+from eka.api.search import SearchResultOut
+from eka.domain.models import SearchFilters, SearchHit
 from eka.services.retrieval import (
     RetrievalService,
     RetrievalSettings,
@@ -296,3 +297,32 @@ async def test_without_a_reranker_the_order_is_the_fused_order() -> None:
         "alice", "carry over leave", top_k=3, filters=SearchFilters()
     )
     assert [h.chunk_id for h in plain] == [h.chunk_id for h in ranked]
+
+
+@pytest.mark.anyio
+async def test_hits_carry_the_rerank_score_only_when_a_reranker_ran() -> None:
+    search = _three_leave_chunks()
+    reranked = await RetrievalService(
+        search, EMBED, RetrievalSettings(candidates=10), _KeywordReranker("leave")
+    ).search("alice", "carry over leave", top_k=3, filters=SearchFilters())
+    assert [h.rerank for h in reranked] == [3.0, 1.0, 1.0]
+
+    plain = await make_service(search).search(
+        "alice", "carry over leave", top_k=3, filters=SearchFilters()
+    )
+    assert all(h.rerank is None for h in plain)
+
+
+def test_the_search_response_exposes_the_rerank_score() -> None:
+    base = dict(
+        rank=1,
+        chunk_id=uuid.uuid4(),
+        document_id=uuid.uuid4(),
+        filename="a.md",
+        locator={},
+        text="t",
+        fused=0.03,
+        cosine=0.7,
+    )
+    assert SearchResultOut.from_hit(SearchHit(**base, rerank=4.25)).scores.rerank == 4.25  # type: ignore[arg-type]
+    assert SearchResultOut.from_hit(SearchHit(**base)).scores.rerank is None  # type: ignore[arg-type]

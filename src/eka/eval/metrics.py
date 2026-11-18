@@ -1,5 +1,6 @@
-"""Retrieval metrics: Hit@k and mean reciprocal rank (MRR)."""
+"""Retrieval metrics: Hit@k, mean reciprocal rank (MRR) and nDCG."""
 
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -13,6 +14,9 @@ class QuestionResult:
     rank: int | None  # 1-based rank of the first relevant passage, None if none was retrieved
     top_cosine: float | None  # best cosine among the passages the gate sees, None if none
     retrieved: tuple[str, ...]  # file names of the retrieved passages, in rank order
+    # 1-based ranks of every relevant passage retrieved (for nDCG); empty when not recorded.
+    relevant_ranks: tuple[int, ...] = ()
+    latency_ms: float | None = None  # wall time of the search call, when measured
 
 
 def is_relevant(hit: SearchHit, question: Question, *, any_document: bool = False) -> bool:
@@ -43,3 +47,21 @@ def mean_reciprocal_rank(results: Sequence[QuestionResult]) -> float:
     if not results:
         return 0.0
     return sum(1.0 / r.rank for r in results if r.rank is not None) / len(results)
+
+
+def ndcg(results: Sequence[QuestionResult], k: int = 10) -> float:
+    """Mean binary-relevance nDCG@k over the retrieved list. The ideal ordering is the relevant
+    passages that were retrieved, placed first; a relevant passage that was never retrieved is not
+    counted, so with one relevant passage per question this is 1/log2(rank+1)."""
+    if not results:
+        return 0.0
+    total = 0.0
+    for r in results:
+        found = r.relevant_ranks or (() if r.rank is None else (r.rank,))
+        ranks = sorted(x for x in found if x <= k)
+        if not ranks:
+            continue
+        dcg = sum(1.0 / math.log2(rank + 1) for rank in ranks)
+        ideal = sum(1.0 / math.log2(i + 2) for i in range(len(ranks)))
+        total += dcg / ideal
+    return total / len(results)
