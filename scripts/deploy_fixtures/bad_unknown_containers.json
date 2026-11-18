@@ -1,0 +1,38 @@
+{
+ "taskDefinitionArn": "arn:aws:ecs:eu-west-1:123456789012:task-definition/eka-api:7",
+ "family": "eka-api",
+ "revision": 7,
+ "status": "ACTIVE",
+ "networkMode": "awsvpc",
+ "requiresCompatibilities": [
+  "FARGATE"
+ ],
+ "cpu": "256",
+ "memory": "512",
+ "executionRoleArn": "arn:aws:iam::123456789012:role/eka-exec-x",
+ "taskRoleArn": "arn:aws:iam::123456789012:role/eka-task-x",
+ "requiresAttributes": [
+  {
+   "name": "com.amazonaws.ecs.capability.ecr-auth"
+  }
+ ],
+ "compatibilities": [
+  "EC2",
+  "FARGATE"
+ ],
+ "registeredAt": "2026-11-10T09:00:00.000000+00:00",
+ "registeredBy": "arn:aws:sts::123456789012:assumed-role/eka-deploy/x",
+ "containerDefinitions": [
+  {
+   "name": "sidecar",
+   "image": "x/y:old",
+   "essential": true,
+   "environment": [
+    {
+     "name": "EKA_ENVIRONMENT",
+     "value": "production"
+    }
+   ]
+  }
+ ]
+}

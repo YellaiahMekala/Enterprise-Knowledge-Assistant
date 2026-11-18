@@ -47,17 +47,12 @@ jobs:
 
       - name: Register task definitions with the new images
         run: |
-          # Copy each current definition, change only the images, register a new revision.
-          filter='del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
-            | .containerDefinitions |= map(
-                if (.name == "core" or .name == "worker" or .name == "migrate") then .image = $core
-                elif .name == "edge" then .image = $edge
-                elif .name == "ops-agent" then .image = $agent
-                else . end)'
+          # Copy each current definition, change only the images (scripts/deploy_task_def.jq, tested in CI),
+          # register a new revision.
           for family in api worker migrate ops-agent; do
             aws ecs describe-task-definition --task-definition "$PREFIX-$family" --query taskDefinition > current.json
             jq --arg core "${{ vars.ECR_CORE }}:$TAG" --arg edge "${{ vars.ECR_EDGE }}:$TAG" \
-               --arg agent "${{ vars.ECR_OPS_AGENT }}:$TAG" "$filter" current.json > next.json
+               --arg agent "${{ vars.ECR_OPS_AGENT }}:$TAG" -f scripts/deploy_task_def.jq current.json > next.json
             arn=$(aws ecs register-task-definition --cli-input-json file://next.json \
                     --query taskDefinition.taskDefinitionArn --output text)
             echo "registered $arn"

@@ -49,6 +49,14 @@ jobs:
         working-directory: ops-agent
         run: mvn -B verify
 
+  deploy-jq:
+    # The jq filter the deploy workflow uses to swap images in task definitions (no AWS call).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Deploy task-definition filter
+        run: bash scripts/test_deploy_jq.sh
+
   ui:
     runs-on: ubuntu-latest
     defaults:
