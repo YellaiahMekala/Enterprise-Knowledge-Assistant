@@ -417,3 +417,7 @@ A Keycloak container created before this change must be recreated once to import
 metrics endpoint, plus search, chat and documents when a database is available. The key variables
 in `postman/local.postman_environment.json` are empty; pass them with `--env-var` or fill them in
 Postman. CI runs the database-free folders against a core started in test mode.
+
+## License and AI use
+
+No open-source license is granted: all rights reserved. Use of this repository for AI or ML training, AI-based analysis or reproduction, or inclusion in datasets is not permitted without written permission: see [AI_USE_POLICY.md](AI_USE_POLICY.md).
