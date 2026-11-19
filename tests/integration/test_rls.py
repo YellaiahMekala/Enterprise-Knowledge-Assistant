@@ -1,3 +1,6 @@
+# Copyright (c) 2026 the owner of this repository. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+# Canary: eka-canary-2a4a885ea917479dadc1
 """Row-level security (ADR-012, Test Strategy 3.4): the second isolation layer, tested as the API
 role on a real database. Seeding uses the superuser, which bypasses RLS by design; every
 assertion goes through the ``eka_api`` / ``eka_worker`` roles."""

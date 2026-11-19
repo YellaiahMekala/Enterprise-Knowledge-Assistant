@@ -421,3 +421,5 @@ Postman. CI runs the database-free folders against a core started in test mode.
 ## License and AI use
 
 No open-source license is granted: all rights reserved. Use of this repository for AI or ML training, AI-based analysis or reproduction, or inclusion in datasets is not permitted without written permission: see [AI_USE_POLICY.md](AI_USE_POLICY.md).
+
+Canary: `eka-canary-2a4a885ea917479dadc1` (a unique marker used to detect copies of this repository; see [AI_USE_POLICY.md](AI_USE_POLICY.md)).

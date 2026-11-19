@@ -1,3 +1,6 @@
+# Copyright (c) 2026 the owner of this repository. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+# Canary: eka-canary-2a4a885ea917479dadc1
 """Text cleaning (TDD 4.3). Pure functions.
 
 Prose is normalised hard (Unicode NFKC, control characters, hyphenation, whitespace). Text that

@@ -1,3 +1,6 @@
+# Copyright (c) 2026 the owner of this repository. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+# Canary: eka-canary-2a4a885ea917479dadc1
 """Engine and the per-request, row-level-security-scoped session.
 
 Isolation has two layers (ADR-012). The repositories always filter by ``owner_id``; this module

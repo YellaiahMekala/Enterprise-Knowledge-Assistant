@@ -1,3 +1,6 @@
+# Copyright (c) 2026 the owner of this repository. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+# Canary: eka-canary-2a4a885ea917479dadc1
 """Reranking study (D1.2.5): the same questions with the cross-encoder off and on, with confidence
 intervals, a per-question comparison and search latency. Free to run: local embedder and local
 cross-encoder, no language model, no network after the models are cached.

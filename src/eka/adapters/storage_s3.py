@@ -1,3 +1,6 @@
+# Copyright (c) 2026 the owner of this repository. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+# Canary: eka-canary-2a4a885ea917479dadc1
 """S3 file store (ADR-013). Works with AWS S3 and any S3-compatible server such as MinIO.
 
 Same contract as the local store: keys are ``{owner_id}/{uuid}``, delete is idempotent, and a

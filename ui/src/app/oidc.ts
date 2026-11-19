@@ -1,3 +1,6 @@
+// Copyright (c) 2026 the owner of this repository. All rights reserved.
+// SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+// Canary: eka-canary-2a4a885ea917479dadc1
 /**
  * OpenID Connect sign-in for a browser app: authorization code flow with PKCE (RFC 7636), no
  * client secret and no library. The verifier, state and nonce live in sessionStorage only for the

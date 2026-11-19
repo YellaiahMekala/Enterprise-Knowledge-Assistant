@@ -1,3 +1,6 @@
+# Copyright (c) 2026 the owner of this repository. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+# Canary: eka-canary-2a4a885ea917479dadc1
 """Chat endpoints: ask a question, read and delete conversations (TDD 6.1, 6.3, ADR-031).
 
 ``POST /api/v1/chat`` returns JSON, or a server-sent event stream when ``stream`` is true.

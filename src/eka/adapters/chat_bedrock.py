@@ -1,3 +1,6 @@
+# Copyright (c) 2026 the owner of this repository. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+# Canary: eka-canary-2a4a885ea917479dadc1
 """Chat model adapter for Amazon Bedrock through the Converse API (ADR-006, ADR-034).
 
 Converse gives one request shape for every model on Bedrock, so changing the model is a setting.

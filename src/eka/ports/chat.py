@@ -1,3 +1,6 @@
+# Copyright (c) 2026 the owner of this repository. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+# Canary: eka-canary-2a4a885ea917479dadc1
 """Chat model port (TDD 4.7, ADR-006). Calls are asynchronous and may be cancelled; closing the
 generator returned by ``stream`` must stop the request to the provider."""
 

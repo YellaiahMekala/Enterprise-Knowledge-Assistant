@@ -1,3 +1,6 @@
+# Copyright (c) 2026 the owner of this repository. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+# Canary: eka-canary-2a4a885ea917479dadc1
 """Fixtures for tests that need a real PostgreSQL with pgvector (Testcontainers).
 
 Skipped with a clear reason when Docker is not available; always run in CI.

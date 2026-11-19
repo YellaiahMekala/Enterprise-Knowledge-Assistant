@@ -1,3 +1,6 @@
+# Copyright (c) 2026 the owner of this repository. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+# Canary: eka-canary-2a4a885ea917479dadc1
 """The evaluation harness against a real database with the fake embedder. This proves the harness
 works end to end (upload, queue, chunk, store, search, score). It says nothing about retrieval
 quality: the fake embedder is not a language model."""

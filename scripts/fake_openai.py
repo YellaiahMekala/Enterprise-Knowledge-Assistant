@@ -1,3 +1,6 @@
+# Copyright (c) 2026 the owner of this repository. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+# Canary: eka-canary-2a4a885ea917479dadc1
 """A scripted stand-in for the chat model, for drills that must not call a paid API.
 
 Serves POST /v1/chat/completions. The first request of a conversation asks for the `runbook`

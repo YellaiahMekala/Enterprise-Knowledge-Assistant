@@ -1,3 +1,6 @@
+# Copyright (c) 2026 the owner of this repository. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+# Canary: eka-canary-2a4a885ea917479dadc1
 """A local stand-in for the Bedrock Converse API, for testing without an AWS account.
 
     python -m eka.tools.bedrock_stub --port 8765

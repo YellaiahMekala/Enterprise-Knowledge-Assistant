@@ -1,3 +1,6 @@
+# Copyright (c) 2026 the owner of this repository. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+# Canary: eka-canary-2a4a885ea917479dadc1
 """Distributed traces (NFR-07): OpenTelemetry over OTLP/HTTP, on when EKA_OTEL_ENDPOINT is set.
 
 One trace follows a question from the edge into the core: the edge sends a W3C ``traceparent``

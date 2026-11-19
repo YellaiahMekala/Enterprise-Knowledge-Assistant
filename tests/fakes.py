@@ -1,3 +1,6 @@
+# Copyright (c) 2026 the owner of this repository. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+# Canary: eka-canary-2a4a885ea917479dadc1
 """In-memory test doubles for the ports (Test Strategy section 4). They are deliberately simple
 but honour each port's contract (owner scoping, idempotent delete), so service and API tests
 exercise real behaviour without a database."""

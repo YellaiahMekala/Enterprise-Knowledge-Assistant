@@ -1,3 +1,6 @@
+# Copyright (c) 2026 the owner of this repository. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+# Canary: eka-canary-2a4a885ea917479dadc1
 """The worker queue against a real PostgreSQL: claim, SKIP LOCKED, stale reclaim, complete,
 fail, release, and the worker role's privileges (TDD 4.9, ADR-010)."""
 

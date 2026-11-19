@@ -1,3 +1,6 @@
+# Copyright (c) 2026 the owner of this repository. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+# Canary: eka-canary-2a4a885ea917479dadc1
 """Code and text loader: blocks of lines, locator ``{"type": "lines", "path": f, "start": a,
 "end": b}`` (1-based, inclusive). No parser dependency (ADR-029): boundaries come from small
 heuristics, and anything the heuristic cannot decide falls back to plain blank-line blocks.

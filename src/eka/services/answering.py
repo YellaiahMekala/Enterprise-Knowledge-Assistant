@@ -1,3 +1,6 @@
+# Copyright (c) 2026 the owner of this repository. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+# Canary: eka-canary-2a4a885ea917479dadc1
 """Answering: retrieve, gate, generate, verify citations, store (TDD 4.7, ADR-031).
 
 Order of work for one question, each database step in its own short transaction so no connection
