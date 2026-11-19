@@ -1,3 +1,6 @@
+# Copyright (c) 2026 the owner of this repository. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+# Canary: eka-canary-2a4a885ea917479dadc1
 """S3 file store against a real S3-compatible server (Adobe S3Mock in a container), over HTTP.
 
 The moto tests cover the adapter's logic in-process; this one proves it talks to a server through

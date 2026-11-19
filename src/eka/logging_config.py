@@ -1,3 +1,6 @@
+# Copyright (c) 2026 the owner of this repository. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+# Canary: eka-canary-2a4a885ea917479dadc1
 """Process-wide logging: plain text for local runs, one JSON object per line in containers.
 
 Records carry ``request_id`` and ``user_id`` from the request context. Logs hold ids only, never

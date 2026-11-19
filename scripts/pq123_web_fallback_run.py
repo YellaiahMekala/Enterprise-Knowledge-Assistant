@@ -1,3 +1,6 @@
+# Copyright (c) 2026 the owner of this repository. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+# Canary: eka-canary-2a4a885ea917479dadc1
 """PQ1.2.3: web fallback hit-rate run against a live stack (real model). Paid: about 14 chat calls.
 
 Env: EKA_RUN_KEY (a user API key, never printed). Usage:

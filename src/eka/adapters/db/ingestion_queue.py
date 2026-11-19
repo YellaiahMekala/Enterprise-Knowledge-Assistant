@@ -1,3 +1,6 @@
+# Copyright (c) 2026 the owner of this repository. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+# Canary: eka-canary-2a4a885ea917479dadc1
 """PostgreSQL implementation of the worker queue (TDD 4.9, ADR-010).
 
 The queue is the ``documents`` table itself: ``status`` is the state machine, ``FOR UPDATE SKIP

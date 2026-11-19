@@ -1,3 +1,6 @@
+# Copyright (c) 2026 the owner of this repository. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+# Canary: eka-canary-2a4a885ea917479dadc1
 """CSV loader: groups of rows, locator ``{"type": "rows", "start": a, "end": b}`` (1-based data
 rows, header excluded). Each row is rendered ``column=value | column=value`` so the column names
 reach the embedding and every chunk carries its own header context."""

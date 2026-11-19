@@ -1,3 +1,6 @@
+# Copyright (c) 2026 the owner of this repository. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+# Canary: eka-canary-2a4a885ea917479dadc1
 """Document use cases for the API: upload, read, list, delete (TDD 4.2, 6.1).
 
 The service holds no database session of its own: it is handed a repository that is already

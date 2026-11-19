@@ -1,3 +1,6 @@
+# Copyright (c) 2026 the owner of this repository. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+# Canary: eka-canary-2a4a885ea917479dadc1
 """Chat on a real database: persistence, cascade, append-only messages, and row-level security
 on the three tables added by migration 0002. The chat model is the fake extractive one."""
 

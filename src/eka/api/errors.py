@@ -1,3 +1,6 @@
+# Copyright (c) 2026 the owner of this repository. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+# Canary: eka-canary-2a4a885ea917479dadc1
 """One error shape for the whole API: RFC 9457 problem+json (ADR-016, TDD 6.4).
 
 Detail is logged here and never returned. Framework errors (unknown route, wrong method,

@@ -1,3 +1,6 @@
+# Copyright (c) 2026 the owner of this repository. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+# Canary: eka-canary-2a4a885ea917479dadc1
 """Print the SHA-256 digest of an API key, for ``EKA_API_KEYS``.
 
     echo -n "my-key" | python -m eka.tools.hash_key      (key read from standard input)

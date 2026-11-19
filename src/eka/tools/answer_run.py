@@ -1,3 +1,6 @@
+# Copyright (c) 2026 the owner of this repository. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+# Canary: eka-canary-2a4a885ea917479dadc1
 """Ask the evaluation questions through the running API and score the answers.
 
     python -m eka.tools.answer_run --base-url http://127.0.0.1:8000 --out eval/reports/run.jsonl

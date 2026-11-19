@@ -1,3 +1,6 @@
+// Copyright (c) 2026 the owner of this repository. All rights reserved.
+// SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+// Canary: eka-canary-2a4a885ea917479dadc1
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';

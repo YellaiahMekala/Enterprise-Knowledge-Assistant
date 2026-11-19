@@ -1,3 +1,6 @@
+# Copyright (c) 2026 the owner of this repository. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+# Canary: eka-canary-2a4a885ea917479dadc1
 """Fetch a page from an allowlisted HTTPS site without opening an SSRF hole (ADR-030).
 
 Each hop (the first URL and every redirect) is checked the same way: https only, no user info,

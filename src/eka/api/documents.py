@@ -1,3 +1,6 @@
+# Copyright (c) 2026 the owner of this repository. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+# Canary: eka-canary-2a4a885ea917479dadc1
 """Document endpoints: upload, list, read, delete (TDD 6.1). All are owner-scoped: the user id
 comes from the credential, and another user's id returns 404."""
 

@@ -1,3 +1,6 @@
+# Copyright (c) 2026 the owner of this repository. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+# Canary: eka-canary-2a4a885ea917479dadc1
 """Token, cost and first-token accounting (ADR-037, FR-53): adapters read the provider's counts
 from recorded payloads, the answer service prices and times them, and metrics never name a user."""
 

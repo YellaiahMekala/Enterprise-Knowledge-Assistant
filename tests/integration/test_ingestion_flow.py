@@ -1,3 +1,6 @@
+# Copyright (c) 2026 the owner of this repository. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+# Canary: eka-canary-2a4a885ea917479dadc1
 """End to end through the real API, real PostgreSQL (row-level security on), real local file
 store and the real worker logic; only the embedding model is faked (FakeEmbedder).
 

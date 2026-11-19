@@ -1,3 +1,6 @@
+# Copyright (c) 2026 the owner of this repository. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+# Canary: eka-canary-2a4a885ea917479dadc1
 """Count-window circuit breaker for one chat model (ADR-038). Same numbers as the edge breaker:
 window 20, minimum 10 calls, opens at 50% failures, open 30 s, 3 half-open probes."""
 

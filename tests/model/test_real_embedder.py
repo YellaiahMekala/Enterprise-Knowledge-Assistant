@@ -1,3 +1,6 @@
+# Copyright (c) 2026 the owner of this repository. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+# Canary: eka-canary-2a4a885ea917479dadc1
 """The real embedding model (spike S-3 turned into a test). Opt-in: it needs the model files
 (about 200 MB, downloaded once into ``EKA_EMBEDDING_CACHE_DIR``, default ``data/models``).
 

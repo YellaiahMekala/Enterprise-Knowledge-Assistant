@@ -1,3 +1,6 @@
+# Copyright (c) 2026 the owner of this repository. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+# Canary: eka-canary-2a4a885ea917479dadc1
 """Run ``parse_document`` in a child process with a wall-clock timeout (TDD 4.3, 4.9).
 
 A pathological file (a PDF that makes the parser loop, a huge document) must not hang or exhaust

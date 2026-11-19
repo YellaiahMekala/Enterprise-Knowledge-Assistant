@@ -1,3 +1,6 @@
+# Copyright (c) 2026 the owner of this repository. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+# Canary: eka-canary-2a4a885ea917479dadc1
 """Chat model adapter for any OpenAI-compatible ``/chat/completions`` endpoint (TDD 4.7, ADR-006).
 
 * Bounded retries with exponential backoff on 429 and 5xx, only before any text was received.
