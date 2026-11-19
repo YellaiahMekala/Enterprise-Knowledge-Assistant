@@ -146,7 +146,8 @@ services:
       - "127.0.0.1:8180:8180"
 
   # Monitoring profile: `docker compose --profile monitoring up`. Put an admin API key (the
-  # plain key, not its hash) in monitoring/secrets/admin_key; that folder is git-ignored.
+  # plain key, not its hash) in monitoring/secrets/admin_key; that folder is git-ignored. Keep it
+  # consistent with the digest in .env: `python -m eka.tools.sync_admin_key --check|--sync|--rotate`.
   # Set EKA_GRAFANA_PASSWORD; if empty, Grafana keeps its default login (loopback only).
   prometheus:
     mem_limit: 512m

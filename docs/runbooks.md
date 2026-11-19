@@ -51,7 +51,7 @@ With the monitoring profile, the same lines are in Loki for 3 days: Grafana, Exp
 **Meaning:** Prometheus has not scraped `core` or `edge` for 2 minutes.
 
 1. Check whether the service is up (`docker compose ps`), and restart it if it exited. Read its last logs first.
-2. Core up but the scrape fails: the admin key file `monitoring/secrets/admin_key` is missing or wrong. A scrape with a bad key fails with 401 and the target shows it.
+2. Core up but the scrape fails: the admin key file `monitoring/secrets/admin_key` is missing or wrong (or no longer matches the admin digest in `EKA_API_KEYS`; run `python -m eka.tools.sync_admin_key --check`, and `--sync` to repair). A scrape with a bad key fails with 401 and the target shows it.
 3. Edge up but the scrape fails: the management port 8081 is not reachable from Prometheus.
 
 ## EkaEdgeCircuitOpen

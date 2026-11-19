@@ -72,7 +72,8 @@ docker compose up -d --build
 # With the edge gateway
 docker compose --profile edge up -d --build
 
-# With Prometheus + Grafana
+# With Prometheus + Grafana (the admin key file must match the digest in .env; --sync repairs it)
+python -m eka.tools.sync_admin_key --check
 docker compose --profile monitoring up -d
 
 # Identity provider (Keycloak on :8180) for the edge and the UI's single sign-on

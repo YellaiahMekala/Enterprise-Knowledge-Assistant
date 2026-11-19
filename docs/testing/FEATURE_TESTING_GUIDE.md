@@ -34,6 +34,8 @@ Secrets are environment variables, never written in this guide.
 | [F14](#f14-web-fallback-and-providers) | Web fallback, Bedrock stand-in | default | yes |
 | [F15](#f15-reranking-study-d125) | Reranking study (D1.2.5) | default + integration DB | no |
 | [F16](#f16-live-triage-agent-and-web-fallback-pq123) | Live triage agent and web fallback (PQ1.2.3) | live model + stack | no |
+| [F17](#f17-deploy-step-and-alarm-queue-on-localstack-pq125) | Deploy step and alarm queue on LocalStack (PQ1.2.5) | stack drill | no |
+| [F18](#f18-admin-key-and-digest-consistency) | Admin key and digest consistency | default | yes |
 
 ## F1 Core API, authentication, isolation
 
@@ -368,3 +370,37 @@ cause because the edge was not in the stack.
 **Talking points.** State the rubric before the run; report the miss (fallback hit rate near zero by default) with the
 cause found in the cosines; keep the tuned-gate run labelled as tuned on the same questions.
 
+## F17 Deploy step and alarm queue on LocalStack (PQ1.2.5)
+
+**What it proves.** Without an AWS account: the `jq` filter that `.github/workflows/deploy.yml` uses replaces the image
+tags and drops registration-only fields (4 good fixtures) and rejects 3 bad inputs; the alarm path (SNS topic, queue,
+dead-letter queue with redrive after 5 receives, a test alarm) works on LocalStack, and the real triage agent jar
+reads an alarm from the queue and sends one email to Mailpit. `terraform destroy` leaves nothing behind.
+
+**Tests.** `scripts/test_deploy_jq.sh` (fixtures in `scripts/deploy_fixtures/`) and `scripts/queue_localstack_drill.sh`
+(uses `infra/aws/localstack/` and `scripts/fake_openai.py`). Evidence:
+`eval/reports/pq1-2-5-localstack-2026-11-19.md` (7 of 7 jq cases; drill ALL PASSED).
+
+**How to run.** Docker running; `bash scripts/test_deploy_jq.sh`, then `bash scripts/queue_localstack_drill.sh` (about 3
+minutes). Run one drill at a time.
+
+**Failure modes.** Leftover stopped `pq125-*` containers (the script now removes them); Git Bash path conversion for
+Docker (`MSYS_NO_PATHCONV=1`); two drills at once share containers and Terraform state.
+
+**Honest limits.** The model is scripted, so this proves wiring, not triage quality. The real
+`aws ecs register-task-definition`, the deploy and real alarm evaluation timing need an AWS account and were not run.
+
+## F18 Admin key and digest consistency
+
+**What it proves.** Prometheus scrapes with the plain admin key in `monitoring/secrets/admin_key`, while the core holds
+only its SHA-256 digest in the admin entry of `EKA_API_KEYS` in `.env`. Both were set by hand, so they drifted (found
+in PQ1.2.3: Prometheus got 401). `eka.tools.sync_admin_key` checks and repairs this and never prints the key or digests.
+
+**Tests.** `tests/test_sync_admin_key.py` (mismatch then sync then match; rotate; missing files give exit 2; output
+contains neither key nor digest).
+
+**How to run.** `pytest tests/test_sync_admin_key.py`. On a machine: `python -m eka.tools.sync_admin_key --check`
+(prints `match` or `mismatch`), `--sync` (file wins), `--rotate` (new key and digest).
+
+**Failure modes.** More than one admin entry in `EKA_API_KEYS` makes `--sync` refuse (exit 2). Restart `api` after a
+change to `.env` so the core reads the new digest.
