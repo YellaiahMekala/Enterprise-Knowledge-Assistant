@@ -95,6 +95,8 @@ service accounts / client credentials (`keycloak/realm-eka.json`). There is no M
 separate service role in edge or core. The triage agent (`ops-agent/`) does not call `/search` (UNVERIFIED beyond
 its tool list in README; its tools are PromQL, health, runbook, log search).
 
+**Update 2026-11-19:** the paragraph above describes EKA's own realm (`keycloak/realm-eka.json`), which is unchanged. The separate platform repo's realm now has machine clients (`svc-reconcile-tenant-a`, `svc-reconcile-tenant-b`) with audience `eka-api`, and the platform INT-3 test (E-60, local) showed the edge accepting such a token (`GET /me` 200) and mapping the two tenants to different owner ids. See section 9.
+
 **What a new internal caller needs (derived from the code above):**
 - Through the edge: a JWT from the configured IdP, signed RS256/ES256, `iss` = configured issuer, `aud` containing
   `eka-api`, non-empty `sub`, within expiry. In Keycloak this means a new confidential client with service accounts
@@ -208,3 +210,18 @@ Source: GitHub Actions log of that run (`gh run view 43393823859 --log`), repo p
 4. The core returns only chunks owned by that one pseudonymous owner. Documents must be uploaded through the
    same identity. **No per-tenant owner mapping exists**; serving several reconcile-ai tenants would need either
    one IdP identity per tenant or new code.
+
+## 9. Addendum, 2026-11-19 (technical design delta; platform register rows are in the platform repo)
+
+This repo has no separate TDD file; the design is in `docs/adr/` and this file. Changes since the 2026-11-13 facts, each checked against code, tests or a recorded run:
+
+| Topic | Fact | Source |
+|---|---|---|
+| Edge rate limit | per user, burst 20, 5 per second, in memory per instance, or shared in Redis (`EKA_EDGE_RATE_LIMIT_REDIS_URL`, one Lua script, fails open); over limit: 429 `problem+json` (`urn:eka:problem:rate-limited`, no query text) with `Retry-After: 1` | `RedisRateLimiterTest` (4), `RateLimitTest` (2); platform INT-4 (E-63): 40 parallel searches gave 21 x 200 / 19 x 429, 60 gave 21 / 39 (local, one laptop, default limits) |
+| Machine caller identity | a platform-realm token with `aud=eka-api` is accepted by the edge; other audiences and no token give 401; tenant-a and tenant-b tokens map to different owner ids (`u` + HMAC of `iss` and `sub`); the edge reads no roles from these tokens | platform INT-3 (E-60, local, 27 of 27 checks across services); `IdentityMapper.java` |
+| Admin key | Prometheus scrapes with the plain key in `monitoring/secrets/admin_key`; the core holds only its SHA-256 digest in the admin entry of `EKA_API_KEYS`; `python -m eka.tools.sync_admin_key` with `--check`, `--sync` or `--rotate` keeps them in step and never prints the key or digests; exactly one admin entry is required | `src/eka/tools/sync_admin_key.py`, `tests/test_sync_admin_key.py` (3 tests) |
+| Interop fixtures | `tests/test_edge_interop.py` reads tokens written by `InteropFixtureTest` to `gateway/target/interop`; leeway 3600 s; stale files fail two tests; regenerate with `cd gateway && mvn -o -q -B test` | `tests/test_edge_interop.py`; 2026-11-18 failure, 2026-11-19 fix |
+| Test counts | `pytest -m "not integration"`: 612 passed, 5 skipped, 79 deselected (696 collected); full `pytest -q` with Docker: 691 passed, 5 skipped; ruff and strict mypy clean (184 files formatted, 161 typed). The five skips: two are opt-in real-embedding tests, three are to be confirmed. Edge 47 and ops agent 92 (CI run 43393823859 recorded 47 and 80) | README "Test evidence", 2026-11-19; not re-run in this docs pass |
+| AWS | Terraform in `infra/aws` (ECS Fargate, RDS, S3, ElastiCache, WAF, OIDC deploy role, alarms, agent service) is validated in CI and never applied; the alarm-queue path and deploy `jq` step were run on LocalStack (7 of 7 jq cases, drill ALL PASSED). In the platform integration the root is not applyable as-is: EKA expects an existing `vpc_id`, and the other services' roots create their own VPCs; ops-agent has none | `infra/aws/README.md`; `eval/reports/pq1-2-5-localstack-2026-11-19.md`; platform AWS guide |
+| Two different agents | EKA's own triage agent (`ops-agent/` in this repo, SQS alarm path, Alertmanager webhook) is not the separate `ops-agent` repo (gateway mode, OAuth2 intake) | repos |
+| Governance | `AI_USE_POLICY.md`, README notice and a canary header on 267 source files (commit `c8121ac`, branch `chore/headers-canary`); `eval/corpus/RetryPolicy.java` excluded; a view-only `LICENSE` is present but uncommitted | `git grep`, file check |
