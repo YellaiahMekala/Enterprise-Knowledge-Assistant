@@ -1,7 +1,7 @@
 # EKA: feature testing guide
 
 Scope: the main features of the service and what each test set proves. Numbers come from the README "Built and checked"
-section, the runbooks and a local run on 2026-11-18. Where a feature was only checked locally, the guide says so.
+section, the runbooks and local runs on 2026-11-18 and 2026-11-19 (F19 to F25 were added on 2026-11-19, in the order: results table, why it was built this way, trade-offs, limits, pending). Where a feature was only checked locally, the guide says so.
 CI means the GitHub Actions workflow `.github/workflows/ci.yml`. A CI run number or date is quoted only where the README
 already records it.
 
@@ -36,6 +36,13 @@ Secrets are environment variables, never written in this guide.
 | [F16](#f16-live-triage-agent-and-web-fallback-pq123) | Live triage agent and web fallback (PQ1.2.3) | live model + stack | no |
 | [F17](#f17-deploy-step-and-alarm-queue-on-localstack-pq125) | Deploy step and alarm queue on LocalStack (PQ1.2.5) | stack drill | no |
 | [F18](#f18-admin-key-and-digest-consistency) | Admin key and digest consistency | default | yes |
+| [F19](#f19-edge-interop-fixtures-stale-token-files) | Edge interop fixtures (stale token files) | default + Maven | yes |
+| [F20](#f20-edge-rate-limit-shared-redis-limiter-and-the-40-parallel-burst) | Edge rate limit, shared Redis limiter, 40-parallel burst | default + stack | partly |
+| [F21](#f21-eka-identity-in-the-platform-login-test-int-3-and-the-admin-key) | EKA identity in the platform login test (INT-3) | stack drill | no |
+| [F22](#f22-aws-deployment-code-terraform-for-ecs-and-what-has-not-run) | AWS deployment code (Terraform for ECS) | validate only | yes (validate) |
+| [F23](#f23-copyright-and-canary-headers-view-only-policy) | Copyright and canary headers, view-only policy | file check | n/a |
+| [F24](#f24-test-counts-lint-and-types-2026-11-19) | Test counts, lint and types | default | yes |
+| [F25](#f25-link-following-local-log-shipping-to-cloudwatch-and-the-browser-test-p16-2026-11-13) | Link following, CloudWatch log shipping, browser test | default + stack | partly |
 
 ## F1 Core API, authentication, isolation
 
@@ -54,14 +61,14 @@ pytest -m "not integration"      # no Docker
 pytest -m integration            # needs Docker
 ```
 
-**Expected.** All green. On 2026-11-18 the default set gave 594 passed, 5 skipped, 2 failed (see failure modes). The full
+**Expected.** All green. On 2026-11-18 the default set gave 594 passed, 5 skipped, 2 failed (stale interop fixtures, see F19). After regenerating them on 2026-11-19: 612 passed, 5 skipped, 79 deselected without Docker, and 691 passed, 5 skipped with Docker (F24). The full
 suite on 2026-11-11 (with Docker) gave 616 passed, 5 skipped, coverage 91.1% (gate 85%).
 
 **Failure modes.**
 
 - `test_edge_interop.py` reads tokens that the edge test run writes to `gateway/target/interop`. If that folder is older
-  than the one-hour test leeway, two tests fail. This is a stale fixture, not a product bug: run `mvn -B verify` in
-  `gateway/` to rewrite it, or delete the folder (the module then skips).
+  than the one-hour test leeway, two tests fail. This is a stale fixture, not a product bug: run `mvn -o -q -B test` (or `mvn -B verify`) in
+  `gateway/` to rewrite it, or delete the folder (the module then skips). Details in F19.
 - A half-configured start (missing secret) is refused by `test_settings.py` on purpose.
 
 **Talking points.** Isolation is enforced twice (repository contract and RLS), so one forgotten filter does not leak. The
@@ -404,3 +411,140 @@ contains neither key nor digest).
 
 **Failure modes.** More than one admin entry in `EKA_API_KEYS` makes `--sync` refuse (exit 2). Restart `api` after a
 change to `.env` so the core reads the new digest.
+
+## F19 Edge interop fixtures (stale token files)
+
+Status: root cause found and fixed in the test procedure on 2026-11-19; no product bug. Local, free.
+
+| Check | Setup | Result |
+|---|---|---|
+| Tokens minted by the real edge verify in the core | `tests/test_edge_interop.py` (3 tests: user token accepted, admin token accepted, wrong audience refused) reads `gateway/target/interop/*.jwt` and `jwks.json`, written by `InteropFixtureTest` in the edge test run | accepted and refused as designed when the fixtures are fresh |
+| Failure seen | full `pytest` on 2026-11-18 with the fixture files older than the one-hour leeway the test allows | 2 failed, including `test_edge_user_token_is_accepted` (F1 failure modes): expired token, not a defect in the edge or core |
+| Fix | `cd gateway && mvn -o -q -B test` rewrites the fixtures (offline, quiet, batch); deleting `gateway/target/interop` makes the module skip instead | 2026-11-19: with regenerated fixtures the full `pytest -q` with Docker up gave 691 passed, 5 skipped; without Docker `pytest -m "not integration"` gave 612 passed, 5 skipped, 79 deselected |
+
+**Why it was built this way.** The edge's internal token lives 60 seconds by design. The interop test needs a token that was really minted by the Java edge, so it reads a file the edge test wrote and relaxes only expiry (leeway 3600 s). That makes the test depend on file age, which is a known weakness, not a fault in the token rules (ADR-022, `PLATFORM_FACTS.md` section 2).
+
+**Trade-offs and alternatives.**
+
+- Regenerating the fixture before the Python run keeps the real cross-language proof. Minting a fresh token inside the Python test would need the edge's private key, which the core must never have.
+- A much longer leeway would hide the symptom but weaken what the test shows about expiry; it was not changed.
+- Skipping when the folder is absent keeps clean checkouts green, but a stale folder fails instead of skipping. Making the test also skip on stale files is a possible change and was not made.
+
+**Not covered / limits of this evidence.** The 5 skipped tests: two are the opt-in real-embedding tests (`EKA_TEST_REAL_MODEL`); the other three are to be confirmed. The fixture run needs Maven and Java 21 locally.
+
+**Pending.** How CI orders the edge job and the Python job with respect to this fixture: to be confirmed after the next push.
+
+## F20 Edge rate limit, shared Redis limiter and the 40-parallel burst
+
+Status: limiter built 2026-11-13 (P13); burst measured 2026-11-19 as part of the platform INT-4 run (local, free). Evidence: platform register E-63; reconcile-ai `docs/proof/int-4-concurrency-2026-11-19.md`.
+
+| Check | Setup | Result |
+|---|---|---|
+| Shared limit across edge instances | `RedisRateLimiterTest` (4 tests, real Redis in `gateway/src/test/java/com/eka/edge/ratelimit/`); `RateLimitTest` (2) for the in-memory limiter | two edge instances allowed 5 of 10 requests together, where in-memory counting allows 10 (README, P13); the limiter fails open if Redis is down |
+| 40 parallel searches at the real edge | platform INT-4 stack, one user, default limits (burst 20, 5 per second, in memory) | 21 x 200 and 19 x 429; every 429 has `Retry-After: 1` and a `problem+json` body (`urn:eka:problem:rate-limited`) with no query text |
+| 60 parallel searches | same | 21 x 200 and 39 x 429 |
+| reconcile-ai calling EKA under load | 25 parallel investigations, wide pool, fail-open | 2 of 25 lookups got 429; reconcile-ai recorded `UNAVAILABLE / RATE_LIMITED` (the `RATE_LIMITED` handling), continued without procedures and all 25 jobs SUCCEEDED |
+| Same, fail-closed | `KNOWLEDGE_FAIL_CLOSED=true` | 3 jobs failed retryably with `KNOWLEDGE_UNAVAILABLE` (2 rate limited, 1 timeout), no model call; re-run 3 of 3 succeeded |
+| EKA core not answering | core paused during 10 investigations | 10 of 10 lookups `TIMEOUT` at the 5 s limit, then the caller's breaker opened (`CIRCUIT_OPEN`, no request sent) |
+
+**Why it was built this way.** A per-user token bucket at the edge protects the core from one noisy caller before any retrieval work starts (ADR-025). The shared Redis variant exists because two edge tasks counting separately would double the limit. Knowledge is advisory for reconcile-ai, so a limited lookup degrades to "no procedures" instead of failing the investigation.
+
+**Trade-offs and alternatives.**
+
+- 21 allowed in a 40-request burst is the bucket (20) plus one refill: the shape of the limiter, not a recommended limit.
+- In-memory counting is simplest and has no dependency, but it is per instance; Redis shares it at the price of one more component that must fail open.
+- A retry with backoff on `Retry-After: 1` inside reconcile-ai is a possible later change; it was not added because it is a design choice, not a defect.
+
+**Not covered / limits of this evidence.** One laptop, one run each, one user identity, one edge instance, stub model upstream of EKA, at most 60 parallel requests: behaviour figures, not capacity. Log scan of the EKA edge, core and worker containers found 0 payload or secret hits, but the edge log was read as the Docker tail (1000 lines).
+
+**Pending.** Two edge instances behind the shared Redis limiter under the INT-4 load (to be confirmed; not in the proof); real-AWS ElastiCache run (never applied).
+
+## F21 EKA identity in the platform login test (INT-3) and the admin key
+
+Status: done locally 2026-11-19 (platform E-60, 27 of 27 checks across services); the admin key tool is F18.
+
+| Check | Setup | Result |
+|---|---|---|
+| Platform token with `aud=eka-api` at the edge | platform `scripts/int/int3.sh`, EKA edge on port 8480 (`--profile edge`, audience `eka-api`) | `GET /me` 200 |
+| Tokens for other audiences at the edge | tokens for `ai-gateway`, `ops-agent`, and console | 401 |
+| No token | same | 401 |
+| Tenant mapping | tenant-a and tenant-b service tokens | two different owner ids (`user_id` differs); the edge derives the id from `iss` plus `sub`, never from a tenant claim |
+| Roles | token roles claim | EKA reads no roles for these tokens (admin only if `eka-admin` is present) |
+
+**Why it was built this way.** EKA has no tenant concept; isolation is per owner (`PLATFORM_FACTS.md` section 3). A machine client therefore needs its own identity per tenant, and the pseudonym keeps the provider's `sub` out of the database. The check that two tenant clients map to different owners is the identity half of the isolation proof (E-26 shows the document half).
+
+**Trade-offs and alternatives.** One identity per tenant is simple and works for a few demo tenants; it does not scale to many (token exchange or a tenant-aware mapping would). Calling the core directly with an API key would skip the edge's checks and is for local use only.
+
+**Not covered / limits of this evidence.** Identity only: no document work in this run. Keycloak is `start-dev`.
+
+**Pending.** Hosted identity provider beside Keycloak (D1.2.6, needs a real account).
+
+## F22 AWS deployment code (Terraform for ECS) and what has not run
+
+Status: written and validated; never applied. CI job `terraform` runs `terraform fmt -check -recursive` and `terraform validate`. The LocalStack alarm-queue drill is F17.
+
+| Check | Setup | Result |
+|---|---|---|
+| Format and validation | CI job `terraform` (Terraform 1.13.0, `init -backend=false`) | passes (README) |
+| ECS Fargate | `infra/aws/ecs.tf`: edge and core in one task (talk over `localhost`), a worker service, a one-off migration task | validate only |
+| Added in P13 | `autoscaling.tf` (api 2 to 4 tasks), `cache.tf` (ElastiCache with TLS), `waf.tf`, `deploy_role.tf` (GitHub OIDC), `alarms.tf` | validate only; "code only, not applied" |
+| Triage agent on AWS (P14) | `ops_agent.tf`: own Fargate service, no inbound port, alarms through SNS and SQS | tested with a stand-in SQS client and, since 2026-11-19, a LocalStack drill (F17); real alarm timing not run |
+| Deploy step | `scripts/test_deploy_jq.sh` | 7 of 7 cases (F17) |
+
+**Why it was built this way.** The point was to have reviewed, validated infrastructure code and honest labels on it, without spending money or claiming a deployment.
+
+**Trade-offs and alternatives.** Edge and core in one task remove a network hop and keep the core private, at the price of scaling them together. Validating only is free; a real apply would catch service limits, Bedrock model access and the pgvector version RDS offers, which `infra/aws/README.md` lists as unverified.
+
+**Not covered / limits of this evidence.** Never planned or applied against an account. In the platform integration, EKA expects an existing `vpc_id`; the integration is not applyable as-is (platform AWS guide: shared-VPC root and ops-agent Terraform missing).
+
+**Pending.** Real apply, record and destroy (needs credentials and cost approval); WAF and deploy role in a real account.
+
+## F23 Copyright and canary headers, view-only policy
+
+Status: done 2026-11-19 on branch `chore/headers-canary` (commit `c8121ac`; the branch is pushed and its tracking state is up to date). Merge and CI run id: to be confirmed.
+
+| Check | Setup | Result |
+|---|---|---|
+| Policy and notice | `AI_USE_POLICY.md` and the README section "License and AI use" (commit `8020fb0`, merged by PR #1) | all rights reserved; training, AI analysis or reproduction, dataset inclusion and scraping need written permission |
+| Header on source files | `git grep` for the canary marker | 269 tracked files carry it: 267 source files (169 `.py`, 73 `.java`, 25 `.ts`) plus README and the policy |
+| Deliberate exclusion | `eval/corpus/RetryPolicy.java` | no header: it is evaluation data and evaluation questions (for example q43, q44) cite its text |
+| Build still works | not re-run after the change in this docs pass | to be confirmed (the Python files only gained comment lines; reconcile-ai and ai-gateway UI builds were verified in E-58) |
+
+Header form: a copyright line, an SPDX identifier `LicenseRef-Proprietary` with "View only; see LICENSE and AI_USE_POLICY.md", and the canary line (marker value is in the README and policy, not repeated here).
+
+**Why it was built this way.** The repo is public to be read; the notice states in every file that reading is the permitted use. The marker lets the owner detect a copy.
+
+**Trade-offs and alternatives.** Headers add three lines to each file and can be stripped; the policy is a legal notice, not a technical control. Excluding the eval corpus file keeps the evaluation corpus text unchanged, so earlier retrieval results stay comparable.
+
+**Not covered / limits of this evidence.** A view-only proprietary `LICENSE` file, which the headers refer to, appeared in the working tree on 2026-11-19 (about 17:00) and is untracked (uncommitted); commit and CI: to be confirmed. No search for copies was done.
+
+**Pending.** Merge of the branch and commit of `LICENSE`; owner decision on a hybrid public-portfolio setup.
+
+## F24 Test counts, lint and types (2026-11-19)
+
+| Check | Setup | Result |
+|---|---|---|
+| Core tests, default | `pytest -m "not integration"` | 612 passed, 5 skipped, 79 deselected (696 collected) |
+| Full suite with Docker | `pytest -q` with Docker up, fixtures regenerated (F19) | 691 passed, 5 skipped |
+| Ruff | `ruff check .`, `ruff format --check .` | clean; 184 files formatted |
+| Mypy strict | `mypy src tests` | clean; 161 files typed (`mypy src scripts`: 93 files) |
+| Admin key tool | `tests/test_sync_admin_key.py` | 3 tests (F18) |
+| Edge | `cd gateway && mvn -B verify` | 47 tests in the last recorded CI run 43393823859; later local count: to be confirmed |
+
+Values are taken from the README "Test evidence" table written on 2026-11-19 and were not re-run in this docs pass (the default set could not run here because pytest is not installed in the shell Python). Earlier full run: 616 passed, 5 skipped, coverage 91.1% (gate 85%), 2026-11-11.
+
+## F25 Link following, local log shipping to CloudWatch and the browser test (P16, 2026-11-13)
+
+| Check | Setup | Result |
+|---|---|---|
+| Link following in web fallback (ADR-039, off by default) | `tests/test_web_links.py`, 8 unit tests (BRD AC-29); live run against docs.python.org | one level, same host and directory, robots.txt respected, capped per entry page; live run stored an entry page and 5 linked pages and answered citing a linked page |
+| Local log shipping to CloudWatch (ADR-040, profile `cloudwatch`) | Vector and LocalStack 4.9; the triage agent searches the group | core log lines appear in the group `eka/core/<id>` and are found with and without an `ERROR` filter (BRD AC-30); never run on real AWS |
+| Browser test in CI (ADR-041) | `ui/e2e/smoke.spec.ts` (Playwright), CI job `ui-browser` | 6 local passes in a row on 2026-11-13; CI job green in run 44296520354 (2026-11-18) |
+
+**Why it was built this way.** Link following lets a documentation question reach the next page without a general crawler; the one-level, same-directory rule and robots.txt keep it narrow and safe. Shipping logs to CloudWatch locally tests the AWS log path without an account. The browser test catches what unit tests cannot (a login bug was found that way).
+
+**Trade-offs and alternatives.** A search engine or deep crawl would find more pages and widen the attack surface (SSRF, injection); it was rejected. LocalStack is a stand-in, so real CloudWatch behaviour is unproven.
+
+**Not covered / limits of this evidence.** Web fallback checked with the fake chat model except for the live questions in F16; real CloudWatch and real Bedrock never called.
+
+**Pending.** Real AWS runs.
